@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import Editor from './components/Editor'
+import { listen } from '@tauri-apps/api/event'
+import Editor, { type EditorRef } from './components/Editor'
 import SearchPanel from './components/SearchPanel'
 import './App.css'
 
@@ -35,11 +36,33 @@ function App() {
   const [isSearching, setIsSearching] = useState(false)
   const [statusMessage, setStatusMessage] = useState('Ready')
   const [theme, setTheme] = useState<Theme>('light')
-  const editorRef = useRef<{ getContent: () => string }>(null)
+  const [isTailMode, setIsTailMode] = useState(false)
+  const editorRef = useRef<EditorRef>(null)
   const settingsMenuRef = useRef<HTMLDivElement>(null)
+  const tailUnlistenRef = useRef<(() => void) | null>(null)
+
+  // Stop any active tail session and clean up listeners
+  const stopTail = useCallback(async () => {
+    if (isTauri()) {
+      try {
+        await invoke('stop_tail')
+      } catch (error) {
+        console.error('Failed to stop tail:', error)
+      }
+    }
+    if (tailUnlistenRef.current) {
+      tailUnlistenRef.current()
+      tailUnlistenRef.current = null
+    }
+    setIsTailMode(false)
+  }, [])
 
   // Handle file open
   const handleOpenFile = useCallback(async () => {
+    if (isTailMode) {
+      await stopTail()
+    }
+
     try {
       // For now, use a simple prompt. In production, use Tauri's dialog API
       const path = prompt('Enter file path to open:')
@@ -55,7 +78,7 @@ function App() {
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
     }
-  }, [])
+  }, [isTailMode, stopTail])
 
   // Handle file save
   const handleSaveFile = useCallback(async () => {
@@ -115,6 +138,63 @@ function App() {
     }
   }, [])
 
+  // Start tail mode – watch the open file for new content
+  const startTail = useCallback(async () => {
+    if (!filePath) {
+      setStatusMessage('No file open to tail')
+      return
+    }
+    if (!isTauri()) {
+      setStatusMessage('Tail requires running as a desktop app')
+      return
+    }
+
+    try {
+      await invoke('start_tail', { filePath })
+
+      const unlistenUpdate = await listen<string>('tail_update', (event) => {
+        editorRef.current?.appendContent(event.payload)
+      })
+
+      const unlistenRotated = await listen('tail_rotated', async () => {
+        try {
+          const result = await invoke<FileContent>('read_file', { filePath })
+          setFileContent(result.content)
+          setStatusMessage(`Tail: ${result.file_name} (rotated)`)
+          // Scroll to bottom after React has re-rendered the new content
+          setTimeout(() => editorRef.current?.scrollToBottom(), 0)
+        } catch (error) {
+          setStatusMessage(`Tail reload error: ${error}`)
+        }
+      })
+
+      const unlistenError = await listen<string>('tail_error', (event) => {
+        setStatusMessage(`Tail error: ${event.payload}`)
+        setIsTailMode(false)
+        tailUnlistenRef.current?.()
+        tailUnlistenRef.current = null
+      })
+
+      tailUnlistenRef.current = () => {
+        unlistenUpdate()
+        unlistenRotated()
+        unlistenError()
+      }
+
+      setIsTailMode(true)
+      setStatusMessage(`Tailing: ${fileName}`)
+    } catch (error) {
+      setStatusMessage(`Failed to start tail: ${error}`)
+    }
+  }, [filePath, fileName])
+
+  // Cleanup tail listeners on unmount
+  useEffect(() => {
+    return () => {
+      tailUnlistenRef.current?.()
+    }
+  }, [])
+
   // Handle CLI args on startup
   useEffect(() => {
     const loadCliArgs = async () => {
@@ -165,13 +245,21 @@ function App() {
             e.preventDefault()
             setShowSearch(prev => !prev)
             break
+          case 't':
+            e.preventDefault()
+            if (isTailMode) {
+              stopTail()
+            } else {
+              startTail()
+            }
+            break
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleOpenFile, handleSaveFile])
+  }, [handleOpenFile, handleSaveFile, isTailMode, startTail, stopTail])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -197,11 +285,20 @@ function App() {
           <button onClick={handleOpenFile} title="Open File (Ctrl+O)">
             Open
           </button>
-          <button onClick={handleSaveFile} disabled={!isModified} title="Save (Ctrl+S)">
+          <button onClick={handleSaveFile} disabled={!isModified || isTailMode} title="Save (Ctrl+S)">
             Save{isModified ? ' *' : ''}
           </button>
+          <button
+            onClick={isTailMode ? stopTail : startTail}
+            disabled={!filePath}
+            title={isTailMode ? 'Stop Tail (Ctrl+T)' : 'Start Tail – monitor file for new content (Ctrl+T)'}
+            className={isTailMode ? 'btn-tail-active' : ''}
+          >
+            {isTailMode ? '⏹ Tail' : 'Tail'}
+          </button>
           <span className="file-name">
-            {fileName || 'Untitled'}{isModified ? ' *' : ''}
+            {fileName || 'Untitled'}{isModified && !isTailMode ? ' *' : ''}
+            {isTailMode ? ' 👁' : ''}
           </span>
         </div>
         <div className="toolbar-right">
@@ -238,6 +335,7 @@ function App() {
             initialContent={fileContent}
             fileName={fileName}
             theme={theme}
+            readOnly={isTailMode}
             onChange={handleContentChange}
           />
         </div>
@@ -256,7 +354,7 @@ function App() {
       <footer className="status-bar">
         <span>{statusMessage}</span>
         <span className="shortcuts">
-          Ctrl+O: Open | Ctrl+S: Save | Ctrl+F: Search
+          Ctrl+O: Open | Ctrl+S: Save | Ctrl+F: Search | Ctrl+T: Tail
         </span>
       </footer>
     </div>

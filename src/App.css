@@ -139,6 +139,21 @@ html, body, #root {
   opacity: 0.8;
 }
 
+/* Active tail button – green pulse to indicate monitoring is live */
+.toolbar button.btn-tail-active {
+  background-color: #1a7a3a;
+  animation: tail-pulse 2s ease-in-out infinite;
+}
+
+.toolbar button.btn-tail-active:hover:not(:disabled) {
+  background-color: #1e9245;
+}
+
+@keyframes tail-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 10px;
