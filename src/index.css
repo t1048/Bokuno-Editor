@@ -1,0 +1,96 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light;
+  --color-bg: #ffffff;
+  --color-text: #1f2328;
+  --color-surface: #f6f8fa;
+  --color-toolbar-bg: #f3f4f6;
+  --color-border: #d0d7de;
+  --color-button-bg: #0e639c;
+  --color-button-hover: #1177bb;
+  --color-button-disabled-bg: #d0d7de;
+  --color-button-disabled-text: #6e7781;
+  --color-input-bg: #ffffff;
+  --color-input-border: #d0d7de;
+  --color-muted-text: #57606a;
+  --color-status-bg: #007acc;
+  --color-status-text: #ffffff;
+  --color-hover-bg: #eef2f6;
+  --color-highlight-bg: #ffe59a;
+  --color-highlight-text: #1f2328;
+  --color-selection-bg: #cce5ff;
+  --color-scrollbar-track: #f3f4f6;
+  --color-scrollbar-thumb: #c1c7cf;
+  --color-scrollbar-thumb-hover: #aeb6bf;
+  --color-danger-hover: #c75450;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #1e1e1e;
+  --color-text: #cccccc;
+  --color-surface: #252526;
+  --color-toolbar-bg: #252526;
+  --color-border: #333;
+  --color-button-bg: #0e639c;
+  --color-button-hover: #1177bb;
+  --color-button-disabled-bg: #3c3c3c;
+  --color-button-disabled-text: #858585;
+  --color-input-bg: #3c3c3c;
+  --color-input-border: #3c3c3c;
+  --color-muted-text: #858585;
+  --color-status-bg: #007acc;
+  --color-status-text: #ffffff;
+  --color-hover-bg: #2a2d2e;
+  --color-highlight-bg: #613613;
+  --color-highlight-text: #ffffff;
+  --color-selection-bg: #264f78;
+  --color-scrollbar-track: #1e1e1e;
+  --color-scrollbar-thumb: #424242;
+  --color-scrollbar-thumb-hover: #4f4f4f;
+  --color-danger-hover: #c75450;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 500;
+}
+
+button {
+  font-family: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+}
