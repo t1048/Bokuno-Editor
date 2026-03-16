@@ -12,11 +12,14 @@ interface EditorProps {
   initialContent: string
   fileName: string
   theme: 'light' | 'dark'
+  readOnly?: boolean
   onChange?: (content: string) => void
 }
 
 export interface EditorRef {
   getContent: () => string
+  appendContent: (text: string) => void
+  scrollToBottom: () => void
 }
 
 const getLanguageExtension = (fileName: string) => {
@@ -40,15 +43,32 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, theme, onChange }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, theme, readOnly, onChange }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
+  const readOnlyCompartmentRef = useRef(new Compartment())
 
   useImperativeHandle(ref, () => ({
     getContent: () => {
       return viewRef.current?.state.doc.toString() || ''
-    }
+    },
+    appendContent: (text: string) => {
+      const view = viewRef.current
+      if (!view) return
+      const endPos = view.state.doc.length
+      view.dispatch({
+        changes: { from: endPos, insert: text },
+        effects: EditorView.scrollIntoView(endPos + text.length, { y: 'end' }),
+      })
+    },
+    scrollToBottom: () => {
+      const view = viewRef.current
+      if (!view) return
+      view.dispatch({
+        effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }),
+      })
+    },
   }))
 
   useEffect(() => {
@@ -61,6 +81,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
       extensions: [
         basicSetup,
         themeCompartmentRef.current.of(theme === 'dark' ? oneDark : []),
+        readOnlyCompartmentRef.current.of(EditorState.readOnly.of(readOnly ?? false)),
         languageExtension,
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange) {
@@ -102,6 +123,16 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
       effects: themeCompartmentRef.current.reconfigure(theme === 'dark' ? oneDark : []),
     })
   }, [theme])
+
+  useEffect(() => {
+    if (!viewRef.current) return
+
+    viewRef.current.dispatch({
+      effects: readOnlyCompartmentRef.current.reconfigure(
+        EditorState.readOnly.of(readOnly ?? false)
+      ),
+    })
+  }, [readOnly])
 
   // Update content when initialContent changes (file opened)
   useEffect(() => {

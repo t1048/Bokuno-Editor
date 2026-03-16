@@ -3,6 +3,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tauri::Emitter;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SearchResult {
@@ -203,6 +206,115 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     })
 }
 
+// --- Tail / log monitoring ---
+
+pub struct TailWatcher {
+    current_stop: Mutex<Option<Arc<AtomicBool>>>,
+}
+
+impl Default for TailWatcher {
+    fn default() -> Self {
+        TailWatcher {
+            current_stop: Mutex::new(None),
+        }
+    }
+}
+
+/// Start watching a file for new appended content (like `tail -f`).
+/// Emits the following events to the frontend:
+///   - "tail_update"  : new content appended (payload: String)
+///   - "tail_rotated" : file was truncated/rotated, frontend should reload it
+///   - "tail_error"   : file disappeared or unreadable (payload: String)
+#[tauri::command]
+async fn start_tail(
+    file_path: String,
+    app_handle: tauri::AppHandle,
+    watcher: tauri::State<'_, TailWatcher>,
+) -> Result<(), String> {
+    // Stop any already-running tail
+    {
+        let guard = watcher.current_stop.lock().unwrap();
+        if let Some(flag) = guard.as_ref() {
+            flag.store(true, Ordering::Relaxed);
+        }
+    }
+
+    // Validate the file and record its current size as the starting offset
+    let metadata =
+        std::fs::metadata(&file_path).map_err(|e| format!("Failed to access file: {}", e))?;
+    let initial_size = metadata.len();
+
+    // Create a fresh stop flag for this session
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut guard = watcher.current_stop.lock().unwrap();
+        *guard = Some(stop_flag.clone());
+    }
+
+    let path = file_path.clone();
+    let flag = stop_flag;
+
+    tokio::spawn(async move {
+        let mut last_size = initial_size;
+
+        loop {
+            if flag.load(Ordering::Relaxed) {
+                break;
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            if flag.load(Ordering::Relaxed) {
+                break;
+            }
+
+            match std::fs::metadata(&path) {
+                Ok(meta) => {
+                    let new_size = meta.len();
+
+                    if new_size > last_size {
+                        // Read only the bytes that were appended
+                        use std::io::{Read, Seek, SeekFrom};
+                        if let Ok(mut file) = std::fs::File::open(&path) {
+                            if file.seek(SeekFrom::Start(last_size)).is_ok() {
+                                let mut buffer = Vec::new();
+                                if file.read_to_end(&mut buffer).is_ok() && !buffer.is_empty() {
+                                    let new_content =
+                                        String::from_utf8_lossy(&buffer).to_string();
+                                    let _ = app_handle.emit("tail_update", new_content);
+                                }
+                            }
+                        }
+                        last_size = new_size;
+                    } else if new_size < last_size {
+                        // File was truncated or log-rotated – tell the frontend to reload.
+                        // Update last_size to the new end so we don't re-read existing bytes.
+                        last_size = new_size;
+                        let _ = app_handle.emit("tail_rotated", ());
+                    }
+                }
+                Err(_) => {
+                    // File was deleted / moved
+                    let _ = app_handle.emit("tail_error", "File not found");
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Stop the currently running tail watcher.
+#[tauri::command]
+async fn stop_tail(watcher: tauri::State<'_, TailWatcher>) -> Result<(), String> {
+    let guard = watcher.current_stop.lock().unwrap();
+    if let Some(flag) = guard.as_ref() {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut log_builder = tauri_plugin_log::Builder::new();
@@ -212,12 +324,15 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(log_builder.build())
+        .manage(TailWatcher::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
             write_file,
             search_in_directory,
             get_file_info,
             get_cli_args,
+            start_tail,
+            stop_tail,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
