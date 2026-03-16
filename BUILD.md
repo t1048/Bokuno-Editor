@@ -34,9 +34,9 @@ Bokuno-Editor/
 ├── src-tauri/             # Rust バックエンドソース
 │   ├── src/
 │   │   └── lib.rs         # Rustコアロジック
+│   ├── dist/              # ビルド出力（フロントエンド） ← React成果物ここに集約
 │   ├── Cargo.toml         # Rust依存関係
 │   └── tauri.conf.json    # Tauri設定
-├── dist/                  # ビルド出力（フロントエンド）
 ├── package.json           # Node.js依存関係
 └── vite.config.ts         # Vite設定
 ```
@@ -79,7 +79,7 @@ npm run tauri dev
 npm run build
 ```
 
-ビルド成果物は `dist/` ディレクトリに出力されます。
+ビルド成果物は `src-tauri/dist/` ディレクトリに出力されます。
 
 ### 4. Rustバックエンドのビルド
 
@@ -93,12 +93,12 @@ cargo build
 cargo build --release
 ```
 
-`src-tauri/target/debug/app.exe` を直接実行する場合は、必ず先に `npm run build` で `dist/` を生成してください。
+`src-tauri/target/debug/app.exe` を直接実行する場合は、必ず先に `npm run build` で `src-tauri/dist/` を生成してください。
 
 推奨手順：
 
 ```bash
-# プロジェクトルートでフロントエンドをビルド
+# プロジェクトルートでフロントエンドをビルド（成果物は src-tauri/dist/ に出力）
 npm run build
 
 # Rustデバッグビルド
@@ -115,10 +115,10 @@ cargo build
 
 ```bash
 # NSISインストーラーの作成
-npm run tauri build -- --target nsis
+npm run tauri build -- --bundles nsis
 
 # MSIインストーラーの作成
-npm run tauri build -- --target msi
+npm run tauri build -- --bundles msi
 
 # 両方作成
 npm run tauri build
@@ -139,6 +139,32 @@ npm run tauri build
 | `npm run tauri build` | Tauriアプリの本番ビルド |
 | `cargo build` | Rustのデバッグビルド |
 | `cargo build --release` | Rustのリリースビルド |
+
+## Windows右クリックメニュー登録/解除
+
+`src-tauri/windows-shell/` に以下のスクリプトを追加しています。
+
+- `register-context-menu.ps1`: テキストファイルの右クリックメニューへ「Bokuno-Editorで開く」を登録
+- `unregister-context-menu.ps1`: 上記レジストリ登録を削除
+
+登録先レジストリキー（ユーザー単位、管理者権限不要）：
+
+- `HKCU:\Software\Classes\SystemFileAssociations\text\shell\BokunoEditor`
+
+### スクリプトの実行例
+
+```powershell
+# 例: ビルド済み Bokuno-Editor.exe と同じフォルダで実行
+PowerShell -ExecutionPolicy Bypass -File .\register-context-menu.ps1
+
+# アンインストール相当（登録解除）
+PowerShell -ExecutionPolicy Bypass -File .\unregister-context-menu.ps1
+```
+
+### ビルド資材への同梱
+
+- `src-tauri/build.rs` で Rust ビルド時に `register-context-menu.ps1` / `unregister-context-menu.ps1` を `target/{debug|release}/`（`Bokuno-Editor.exe` と同階層）へコピー
+- `src-tauri/tauri.conf.json` の `bundle.resources` に同スクリプトを追加し、Tauri のパッケージング成果物にも同梱
 
 ## トラブルシューティング
 
@@ -188,7 +214,7 @@ MSIビルドに失敗する場合：
   "version": "0.1.0",
   "identifier": "com.bokuno-Editor.app",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "./dist",
     "devUrl": "http://localhost:5173"
   },
   "app": {
