@@ -23,7 +23,15 @@ const getDirectoryFromPath = (fullPath: string) => {
   return fullPath.replace(/[\\/][^\\/]*$/, '')
 }
 
-function SearchPanel({ results, isSearching, onSearch, onResultClick, onClose, initialDirectory = '', currentPath = '' }: SearchPanelProps) {
+function SearchPanel({
+  results,
+  isSearching,
+  onSearch,
+  onResultClick,
+  onClose,
+  initialDirectory = '',
+  currentPath = '',
+}: SearchPanelProps) {
   const [directory, setDirectory] = useState(initialDirectory)
   const [pattern, setPattern] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)

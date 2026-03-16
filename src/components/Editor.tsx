@@ -1,6 +1,8 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Compartment } from '@codemirror/state'
+import { keymap } from '@codemirror/view'
+import { findNext, findPrevious } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
 import { rust } from '@codemirror/lang-rust'
@@ -94,6 +96,10 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
       doc: initialContent,
       extensions: [
         basicSetup,
+        keymap.of([
+          { key: 'F2', run: findNext },
+          { key: 'Shift-F2', run: findPrevious },
+        ]),
         themeCompartmentRef.current.of(theme === 'dark' ? oneDark : []),
         readOnlyCompartmentRef.current.of(EditorState.readOnly.of(readOnly ?? false)),
         fontSizeCompartmentRef.current.of(EditorView.theme({

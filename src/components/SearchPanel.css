@@ -235,6 +235,7 @@
   line-height: 1.6;
 }
 
+
 @media (max-width: 980px) {
   .search-panel {
     position: absolute;

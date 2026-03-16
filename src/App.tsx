@@ -25,7 +25,6 @@ interface CliArgs {
 }
 
 type Theme = 'light' | 'dark'
-
 const shortenPath = (fullPath: string) => {
   if (!fullPath) return 'No file open'
 
@@ -308,25 +307,15 @@ function App() {
             e.preventDefault()
             handleSaveFile()
             break
-          case 'f':
-            e.preventDefault()
-            setShowSearch(prev => !prev)
-            break
-          case 't':
-            e.preventDefault()
-            if (isTailMode) {
-              stopTail()
-            } else {
-              startTail()
-            }
-            break
+          // Ctrl+Fで検索パネルを表示する機能は削除
+          // Ctrl+T (Tail) ショートカットは削除
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleOpenFile, handleSaveFile, isTailMode, startTail, stopTail])
+  }, [handleOpenFile, handleSaveFile])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -372,7 +361,7 @@ function App() {
               {isTailMode ? 'Stop Tail' : 'Tail'}
             </button>
             <button
-              onClick={() => setShowSearch(!showSearch)}
+              onClick={() => setShowSearch(true)}
               title="Toggle Search (Ctrl+F)"
               className={`tab-button ${showSearch ? 'is-active' : ''}`}
             >
