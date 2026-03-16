@@ -13,6 +13,7 @@ interface EditorProps {
   fileName: string
   theme: 'light' | 'dark'
   readOnly?: boolean
+  fontSize?: number
   onChange?: (content: string) => void
 }
 
@@ -20,6 +21,7 @@ export interface EditorRef {
   getContent: () => string
   appendContent: (text: string) => void
   scrollToBottom: () => void
+  scrollToLine: (lineNumber: number) => void
 }
 
 const getLanguageExtension = (fileName: string) => {
@@ -43,11 +45,12 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, theme, readOnly, onChange }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, theme, readOnly, fontSize = 14, onChange }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
   const readOnlyCompartmentRef = useRef(new Compartment())
+  const fontSizeCompartmentRef = useRef(new Compartment())
 
   useImperativeHandle(ref, () => ({
     getContent: () => {
@@ -69,6 +72,17 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
         effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }),
       })
     },
+    scrollToLine: (lineNumber: number) => {
+      const view = viewRef.current
+      if (!view) return
+      const safeLineNumber = Math.min(Math.max(lineNumber, 1), view.state.doc.lines)
+      const line = view.state.doc.line(safeLineNumber)
+      view.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+      })
+      view.focus()
+    },
   }))
 
   useEffect(() => {
@@ -82,23 +96,26 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
         basicSetup,
         themeCompartmentRef.current.of(theme === 'dark' ? oneDark : []),
         readOnlyCompartmentRef.current.of(EditorState.readOnly.of(readOnly ?? false)),
-        languageExtension,
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged && onChange) {
-            onChange(update.state.doc.toString())
-          }
-        }),
-        EditorView.theme({
+        fontSizeCompartmentRef.current.of(EditorView.theme({
           '&': {
             height: '100%',
-            fontSize: '14px',
+            fontSize: `${fontSize}px`,
           },
           '.cm-scroller': {
             fontFamily: '"JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace',
           },
           '.cm-content': {
-            padding: '10px',
+            padding: '14px 16px 24px',
           },
+          '.cm-gutters': {
+            borderRight: '1px solid transparent',
+          },
+        })),
+        languageExtension,
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged && onChange) {
+            onChange(update.state.doc.toString())
+          }
         }),
       ],
     })
@@ -133,6 +150,28 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
       ),
     })
   }, [readOnly])
+
+  useEffect(() => {
+    if (!viewRef.current) return
+
+    viewRef.current.dispatch({
+      effects: fontSizeCompartmentRef.current.reconfigure(EditorView.theme({
+        '&': {
+          height: '100%',
+          fontSize: `${fontSize}px`,
+        },
+        '.cm-scroller': {
+          fontFamily: '"JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace',
+        },
+        '.cm-content': {
+          padding: '14px 16px 24px',
+        },
+        '.cm-gutters': {
+          borderRight: '1px solid transparent',
+        },
+      })),
+    })
+  }, [fontSize])
 
   // Update content when initialContent changes (file opened)
   useEffect(() => {

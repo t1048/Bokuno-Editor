@@ -1,30 +1,57 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: light;
-  --color-bg: #ffffff;
-  --color-text: #1f2328;
-  --color-surface: #f6f8fa;
-  --color-toolbar-bg: #f3f4f6;
-  --color-border: #d0d7de;
-  --color-button-bg: #0e639c;
-  --color-button-hover: #1177bb;
-  --color-button-disabled-bg: #d0d7de;
-  --color-button-disabled-text: #6e7781;
-  --color-input-bg: #ffffff;
-  --color-input-border: #d0d7de;
-  --color-muted-text: #57606a;
-  --color-status-bg: #007acc;
-  --color-status-text: #ffffff;
-  --color-hover-bg: #eef2f6;
-  --color-highlight-bg: #ffe59a;
-  --color-highlight-text: #1f2328;
-  --color-selection-bg: #cce5ff;
-  --color-scrollbar-track: #f3f4f6;
-  --color-scrollbar-thumb: #c1c7cf;
-  --color-scrollbar-thumb-hover: #aeb6bf;
-  --color-danger-hover: #c75450;
+  
+  --color-bg: #f8fafc;
+  --color-bg-muted: #f1f5f9;
+  --color-bg-accent: rgba(56, 189, 248, 0.1);
+  --color-text: #334155;
+  --color-text-strong: #0f172a;
+  
+  --color-surface: rgba(255, 255, 255, 0.7);
+  --color-surface-elevated: rgba(255, 255, 255, 0.85);
+  --color-toolbar-bg: rgba(255, 255, 255, 0.65);
+  
+  --color-border: rgba(148, 163, 184, 0.2);
+  --color-button-bg: #ffffff;
+  --color-button-hover: #f1f5f9;
+  --color-button-active-bg: #e2e8f0;
+  --color-button-active-border: rgba(148, 163, 184, 0.4);
+  --color-button-disabled-bg: #f1f5f9;
+  --color-button-disabled-text: #94a3b8;
+  
+  --color-input-bg: rgba(255, 255, 255, 0.9);
+  --color-input-border: rgba(148, 163, 184, 0.3);
+  
+  --color-muted-text: #64748b;
+  --color-status-bg: #e2e8f0;
+  --color-status-text: #334155;
+  --color-hover-bg: rgba(14, 165, 233, 0.08);
+  --color-highlight-bg: #fef08a;
+  --color-highlight-text: #854d0e;
+  --color-selection-bg: #bae6fd;
+  
+  --color-scrollbar-track: transparent;
+  --color-scrollbar-thumb: rgba(148, 163, 184, 0.4);
+  --color-scrollbar-thumb-hover: rgba(148, 163, 184, 0.6);
+  
+  --color-danger-hover: #ef4444;
+  
+  --color-pill-bg: rgba(14, 165, 233, 0.1);
+  --color-pill-text: #0369a1;
+  --color-warning-bg: #fef3c7;
+  --color-warning-text: #b45309;
+  --color-success-bg: #dcfce7;
+  --color-success-text: #15803d;
+  
+  --color-focus-ring: rgba(14, 165, 233, 0.3);
+  --color-shadow: rgba(15, 23, 42, 0.08);
+  --color-shadow-soft: rgba(15, 23, 42, 0.04);
+  --color-editor-shell: rgba(255, 255, 255, 0.5);
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -33,28 +60,53 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --color-bg: #1e1e1e;
-  --color-text: #cccccc;
-  --color-surface: #252526;
-  --color-toolbar-bg: #252526;
-  --color-border: #333;
-  --color-button-bg: #0e639c;
-  --color-button-hover: #1177bb;
-  --color-button-disabled-bg: #3c3c3c;
-  --color-button-disabled-text: #858585;
-  --color-input-bg: #3c3c3c;
-  --color-input-border: #3c3c3c;
-  --color-muted-text: #858585;
-  --color-status-bg: #007acc;
-  --color-status-text: #ffffff;
-  --color-hover-bg: #2a2d2e;
-  --color-highlight-bg: #613613;
-  --color-highlight-text: #ffffff;
-  --color-selection-bg: #264f78;
-  --color-scrollbar-track: #1e1e1e;
-  --color-scrollbar-thumb: #424242;
-  --color-scrollbar-thumb-hover: #4f4f4f;
-  --color-danger-hover: #c75450;
+  
+  --color-bg: #0f172a;
+  --color-bg-muted: #1e293b;
+  --color-bg-accent: rgba(56, 189, 248, 0.15);
+  --color-text: #cbd5e1;
+  --color-text-strong: #f8fafc;
+  
+  --color-surface: rgba(30, 41, 59, 0.7);
+  --color-surface-elevated: rgba(30, 41, 59, 0.85);
+  --color-toolbar-bg: rgba(15, 23, 42, 0.65);
+  
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-button-bg: #1e293b;
+  --color-button-hover: #334155;
+  --color-button-active-bg: #475569;
+  --color-button-active-border: rgba(255, 255, 255, 0.2);
+  --color-button-disabled-bg: #0f172a;
+  --color-button-disabled-text: #475569;
+  
+  --color-input-bg: rgba(15, 23, 42, 0.8);
+  --color-input-border: rgba(255, 255, 255, 0.15);
+  
+  --color-muted-text: #94a3b8;
+  --color-status-bg: #1e293b;
+  --color-status-text: #cbd5e1;
+  --color-hover-bg: rgba(56, 189, 248, 0.1);
+  --color-highlight-bg: #854d0e;
+  --color-highlight-text: #fef08a;
+  --color-selection-bg: #0369a1;
+  
+  --color-scrollbar-track: transparent;
+  --color-scrollbar-thumb: rgba(148, 163, 184, 0.2);
+  --color-scrollbar-thumb-hover: rgba(148, 163, 184, 0.4);
+  
+  --color-danger-hover: #ef4444;
+  
+  --color-pill-bg: rgba(56, 189, 248, 0.15);
+  --color-pill-text: #7dd3fc;
+  --color-warning-bg: rgba(245, 158, 11, 0.2);
+  --color-warning-text: #fcd34d;
+  --color-success-bg: rgba(34, 197, 94, 0.2);
+  --color-success-text: #86efac;
+  
+  --color-focus-ring: rgba(56, 189, 248, 0.3);
+  --color-shadow: rgba(0, 0, 0, 0.4);
+  --color-shadow-soft: rgba(0, 0, 0, 0.2);
+  --color-editor-shell: rgba(15, 23, 42, 0.6);
 }
 
 * {

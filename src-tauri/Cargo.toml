@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "Bokuno-Editor"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -23,6 +23,7 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
 ignore = "0.4"
 regex = "1.10"
 tokio = { version = "1.35", features = ["rt-multi-thread", "fs", "time"] }
@@ -30,3 +31,7 @@ tokio = { version = "1.35", features = ["rt-multi-thread", "fs", "time"] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# Windowsでコンソールウィンドウを非表示にする設定
+[package.metadata.windows]
+subsystem = "windows"
