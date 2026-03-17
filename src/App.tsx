@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import Editor, { type EditorRef } from './components/Editor'
+import MarkdownPreview from './components/MarkdownPreview'
 import SearchPanel from './components/SearchPanel'
 import Icon from './components/Icon'
 import './App.css'
@@ -39,6 +40,12 @@ interface WriteRequest {
 }
 
 type Theme = 'light' | 'dark'
+
+const isMarkdownFile = (name: string): boolean => {
+  const ext = name.split('.').pop()?.toLowerCase()
+  return ext === 'md' || ext === 'markdown'
+}
+
 const shortenPath = (fullPath: string) => {
   if (!fullPath) return 'No file open'
 
@@ -97,10 +104,21 @@ function App() {
   const [lineEnding, setLineEnding] = useState('CRLF')
   const [searchDirectory, setSearchDirectory] = useState('')
   const [showPathMenu, setShowPathMenu] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
   const pathMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
   const isModifiedRef = useRef(isModified)
+
+  // MarkdownファイルかどうかをfileNameから判定
+  const isMarkdown = isMarkdownFile(fileName)
+
+  // 非Markdownファイルを開いたらpreviewModeをリセット
+  useEffect(() => {
+    if (!isMarkdown) {
+      setPreviewMode(false)
+    }
+  }, [isMarkdown])
 
   // Sync isModifiedRef with isModified state for use in event listeners
   useEffect(() => {
@@ -505,6 +523,28 @@ function App() {
             >
               <Icon name="search" />
             </button>
+
+            {isMarkdown && (
+              <>
+                <div className="action-separator" />
+                <button
+                  onClick={() => setPreviewMode(false)}
+                  title="Edit mode"
+                  aria-label="Edit mode"
+                  className={`action-btn ${!previewMode ? 'action-btn--active' : ''}`}
+                >
+                  <Icon name="edit" />
+                </button>
+                <button
+                  onClick={() => setPreviewMode(true)}
+                  title="Preview mode"
+                  aria-label="Preview mode"
+                  className={`action-btn ${previewMode ? 'action-btn--active' : ''}`}
+                >
+                  <Icon name="preview" />
+                </button>
+              </>
+            )}
           </div>
 
           <div className="toolbar-right">
@@ -565,15 +605,22 @@ function App() {
       <div className="main-content">
         <section className="workspace-main">
           <div className="editor-frame">
-            <Editor
-              ref={editorRef}
-              initialContent={fileContent}
-              fileName={fileName}
-              theme={theme}
-              readOnly={isTailMode}
-              fontSize={fontSize}
-              onChange={handleContentChange}
-            />
+            {isMarkdown && previewMode ? (
+              <MarkdownPreview
+                content={fileContent}
+                theme={theme}
+              />
+            ) : (
+              <Editor
+                ref={editorRef}
+                initialContent={fileContent}
+                fileName={fileName}
+                theme={theme}
+                readOnly={isTailMode}
+                fontSize={fontSize}
+                onChange={handleContentChange}
+              />
+            )}
           </div>
         </section>
 
@@ -681,7 +728,7 @@ function App() {
         </div>
 
         <div className="status-secondary">
-          <span className="status-pill">{isTailMode ? 'Read only' : 'Editable'}</span>
+          <span className="status-pill">{isTailMode ? 'Read only' : (isMarkdown && previewMode ? 'Preview' : 'Editable')}</span>
           <span 
             className="status-pill clickable" 
             onClick={handleReopenWithEncoding}
