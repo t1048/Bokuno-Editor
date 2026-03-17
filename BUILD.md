@@ -178,6 +178,7 @@ reg query "HKCU\Software\Classes\*\shell\BokunoEditor"
 
 - `src-tauri/build.rs` で Rust ビルド時に `register-context-menu.ps1` / `unregister-context-menu.ps1` を `target/{debug|release}/`（`Bokuno-Editor.exe` と同階層）へコピー
 - `src-tauri/tauri.conf.json` の `bundle.resources` に同スクリプトを追加し、Tauri のパッケージング成果物にも同梱
+- NSIS インストーラーでは `bundle.windows.nsis.installerHooks` で `.nsh` フックを指定し、`NSIS_HOOK_POSTINSTALL` / `NSIS_HOOK_PREUNINSTALL` で PowerShell スクリプトを呼び出すことで、インストール/アンインストール時に自動実行可能
 
 ## トラブルシューティング
 
