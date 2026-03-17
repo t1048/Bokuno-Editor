@@ -150,6 +150,12 @@ npm run tauri build
 登録先レジストリキー（ユーザー単位、管理者権限不要）：
 
 - `HKCU:\Software\Classes\SystemFileAssociations\text\shell\BokunoEditor`
+- `HKCU:\Software\Classes\*\shell\BokunoEditor`
+
+実装メモ：
+
+- これらのスクリプトは PowerShell のレジストリプロバイダー（`New-Item` / `New-ItemProperty`）ではなく、`.NET Registry API`（`[Microsoft.Win32.Registry]::CurrentUser`）で登録/削除を実行
+- `*` を含むキーをワイルドカード展開させず、Windows PowerShell 5.1 / PowerShell 7 の差異による停止を回避
 
 ### スクリプトの実行例
 
@@ -159,6 +165,13 @@ PowerShell -ExecutionPolicy Bypass -File .\register-context-menu.ps1
 
 # アンインストール相当（登録解除）
 PowerShell -ExecutionPolicy Bypass -File .\unregister-context-menu.ps1
+```
+
+### 登録確認（任意）
+
+```powershell
+reg query "HKCU\Software\Classes\SystemFileAssociations\text\shell\BokunoEditor"
+reg query "HKCU\Software\Classes\*\shell\BokunoEditor"
 ```
 
 ### ビルド資材への同梱
