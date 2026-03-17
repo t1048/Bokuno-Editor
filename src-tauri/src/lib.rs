@@ -23,6 +23,20 @@ pub struct SearchRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct ReadRequest {
+    pub file_path: String,
+    pub encoding: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WriteRequest {
+    pub file_path: String,
+    pub content: String,
+    pub encoding: Option<String>,
+    pub line_ending: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileContent {
     pub content: String,
     pub file_name: String,
@@ -30,19 +44,34 @@ pub struct FileContent {
 }
 
 #[tauri::command]
-async fn read_file(file_path: String) -> Result<FileContent, String> {
-    let path = Path::new(&file_path);
+async fn read_file(request: ReadRequest) -> Result<FileContent, String> {
+    let path = Path::new(&request.file_path);
     
     if !path.exists() {
-        return Err(format!("File not found: {}", file_path));
+        return Err(format!("File not found: {}", request.file_path));
     }
     
     if !path.is_file() {
-        return Err(format!("Path is not a file: {}", file_path));
+        return Err(format!("Path is not a file: {}", request.file_path));
     }
     
-    let content = fs::read_to_string(&file_path)
+    let mut bytes = fs::read(&request.file_path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
+    
+    // UTF-8 BOM の除去（存在する場合）
+    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        bytes.drain(0..3);
+    }
+
+    // 文字コードのデコード
+    let encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
+    let actual_encoding_name = if encoding_name == "utf-8-bom" { "utf-8" } else { encoding_name };
+    
+    let encoding = encoding_rs::Encoding::for_label(actual_encoding_name.as_bytes())
+        .ok_or_else(|| format!("Unknown encoding: {}", actual_encoding_name))?;
+    
+    let (content, _actual_encoding, _has_malformed) = encoding.decode(&bytes);
+    let content = content.into_owned();
     
     let file_name = path
         .file_name()
@@ -53,13 +82,47 @@ async fn read_file(file_path: String) -> Result<FileContent, String> {
     Ok(FileContent {
         content,
         file_name,
-        file_path,
+        file_path: request.file_path,
     })
 }
 
 #[tauri::command]
-async fn write_file(file_path: String, content: String) -> Result<(), String> {
-    fs::write(&file_path, content)
+async fn write_file(request: WriteRequest) -> Result<(), String> {
+    let mut content = request.content;
+
+    // 改行コードの変換
+    if let Some(le) = request.line_ending {
+        match le.to_lowercase().as_str() {
+            "crlf" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n");
+            }
+            "cr" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r");
+            }
+            "lf" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n");
+            }
+            _ => {}
+        }
+    }
+
+    // 文字コードのエンコード
+    let encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
+    let is_bom = encoding_name == "utf-8-bom";
+    let actual_encoding_name = if is_bom { "utf-8" } else { encoding_name };
+
+    let encoding = encoding_rs::Encoding::for_label(actual_encoding_name.as_bytes())
+        .ok_or_else(|| format!("Unknown encoding: {}", actual_encoding_name))?;
+    
+    let (bytes, _actual_encoding, _has_malformed) = encoding.encode(&content);
+    
+    let mut final_bytes = Vec::new();
+    if is_bom {
+        final_bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    }
+    final_bytes.extend_from_slice(&bytes);
+    
+    fs::write(&request.file_path, final_bytes)
         .map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())
 }

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { open, save } from '@tauri-apps/plugin-dialog'
+import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import Editor, { type EditorRef } from './components/Editor'
 import SearchPanel from './components/SearchPanel'
 import './App.css'
@@ -22,6 +22,18 @@ interface SearchResult {
 interface CliArgs {
   file_path: string | null
   search_directory: string | null
+}
+
+interface ReadRequest {
+  file_path: string
+  encoding?: string
+}
+
+interface WriteRequest {
+  file_path: string
+  content: string
+  encoding?: string
+  line_ending?: string
 }
 
 type Theme = 'light' | 'dark'
@@ -79,6 +91,8 @@ function App() {
   const [theme, setTheme] = useState<Theme>('light')
   const [isTailMode, setIsTailMode] = useState(false)
   const [fontSize, setFontSize] = useState(14)
+  const [encoding, setEncoding] = useState('utf-8')
+  const [lineEnding, setLineEnding] = useState('CRLF')
   const [searchDirectory, setSearchDirectory] = useState('')
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
@@ -111,17 +125,20 @@ function App() {
       if (!selected || typeof selected !== 'string') return
 
       setStatusMessage('Loading...')
-      const result = await invoke<FileContent>('read_file', { filePath: selected })
+      const readRequest: ReadRequest = { file_path: selected, encoding }
+      const result = await invoke<FileContent>('read_file', { 
+        request: readRequest 
+      })
       setFileContent(result.content)
       setFileName(result.file_name)
       setFilePath(result.file_path)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
-      setStatusMessage(`Opened: ${result.file_name}`)
+      setStatusMessage(`Opened: ${result.file_name} (${encoding})`)
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
     }
-  }, [isTailMode, stopTail])
+  }, [isTailMode, stopTail, encoding])
 
   // Handle file save
   const handleSaveFile = useCallback(async () => {
@@ -141,22 +158,65 @@ function App() {
         targetName = getFileNameFromPath(selected)
       }
 
-      await invoke('write_file', { filePath: targetPath, content: fileContent })
+      const writeRequest: WriteRequest = { 
+        file_path: targetPath, 
+        content: fileContent,
+        encoding,
+        line_ending: lineEnding
+      }
+      await invoke('write_file', { 
+        request: writeRequest 
+      })
       setFilePath(targetPath)
       setFileName(targetName)
       setSearchDirectory(getDirectoryFromPath(targetPath))
       setIsModified(false)
-      setStatusMessage(`Saved: ${targetName}`)
+      setStatusMessage(`Saved: ${targetName} (${encoding}, ${lineEnding})`)
     } catch (error) {
       setStatusMessage(`Error saving: ${error}`)
     }
-  }, [filePath, fileName, fileContent])
+  }, [filePath, fileName, fileContent, encoding, lineEnding])
 
   // Handle content change
   const handleContentChange = useCallback((content: string) => {
     setFileContent(content)
     setIsModified(true)
   }, [])
+
+  // Handle reopen with current encoding
+  const handleReopenWithEncoding = useCallback(async () => {
+    if (!filePath) {
+      setStatusMessage('No file open to reopen')
+      return
+    }
+
+    if (isModified) {
+      const confirmed = await ask(
+        'You have unsaved changes. Reopening will discard your changes. Are you sure?',
+        { title: 'Bokuno Editor', kind: 'warning' }
+      )
+      if (!confirmed) return
+    }
+
+    if (isTailMode) {
+      await stopTail()
+    }
+
+    try {
+      setStatusMessage(`Reopening with ${encoding}...`)
+      const readRequest: ReadRequest = { file_path: filePath, encoding }
+      const result = await invoke<FileContent>('read_file', { 
+        request: readRequest 
+      })
+      setFileContent(result.content)
+      setFileName(result.file_name)
+      setFilePath(result.file_path)
+      setIsModified(false)
+      setStatusMessage(`Reopened: ${result.file_name} (${encoding})`)
+    } catch (error) {
+      setStatusMessage(`Error reopening: ${error}`)
+    }
+  }, [filePath, encoding, isModified, isTailMode, stopTail])
 
   // Handle search
   const handleSearch = useCallback(async (directory: string, pattern: string, caseSensitive: boolean) => {
@@ -447,6 +507,40 @@ function App() {
                 </select>
               </div>
 
+              <div className="settings-section">
+                <label htmlFor="encoding-select">Encoding</label>
+                <select
+                  id="encoding-select"
+                  value={encoding}
+                  onChange={(e) => setEncoding(e.target.value)}
+                >
+                  <option value="utf-8">UTF-8</option>
+                  <option value="shift-jis">Shift-JIS</option>
+                  <option value="utf-8-bom">UTF-8 (BOMあり)</option>
+                </select>
+                <button 
+                  className="reopen-button" 
+                  onClick={handleReopenWithEncoding}
+                  disabled={!filePath}
+                  title="Reopen file with selected encoding"
+                >
+                  Reopen
+                </button>
+              </div>
+
+              <div className="settings-section">
+                <label htmlFor="line-ending-select">Line Ending</label>
+                <select
+                  id="line-ending-select"
+                  value={lineEnding}
+                  onChange={(e) => setLineEnding(e.target.value)}
+                >
+                  <option value="LF">LF (Unix)</option>
+                  <option value="CRLF">CRLF (Windows)</option>
+                  <option value="CR">CR (Mac Legacy)</option>
+                </select>
+              </div>
+
               <div className="settings-note">
                 Search uses Enter to run and Escape to close.
               </div>
@@ -475,6 +569,14 @@ function App() {
 
         <div className="status-secondary">
           <span className="status-pill">{isTailMode ? 'Read only' : 'Editable'}</span>
+          <span 
+            className="status-pill clickable" 
+            onClick={handleReopenWithEncoding}
+            title="Click to reopen file with current encoding"
+          >
+            {encoding.toUpperCase()}
+          </span>
+          <span className="status-pill">{lineEnding}</span>
           <span className="status-pill">Font {fontSize}px</span>
           {/* <span className="status-pill shortcuts">Ctrl+O Open  Ctrl+S Save  Ctrl+F Search  Ctrl+T Tail</span> */}
         </div>
