@@ -113,8 +113,11 @@ function App() {
 
     const setupCloseHandler = async () => {
       const unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+        // Tauri v2 では async コールバック内でのイベント処理が非同期になるため、
+        // 常に preventDefault() を先に呼んで、その後 destroy() で明示的に閉じる
+        event.preventDefault()
+
         if (isModifiedRef.current) {
-          event.preventDefault()
           const confirmed = await ask(
             '変更が保存されていません。保存せずに終了しますか？',
             { title: 'Bokuno Editor', kind: 'warning', okLabel: 'はい', cancelLabel: 'いいえ' }
@@ -122,6 +125,9 @@ function App() {
           if (confirmed) {
             await getCurrentWindow().destroy()
           }
+        } else {
+          // 未保存がなければ即座に閉じる
+          await getCurrentWindow().destroy()
         }
       })
       return unlisten
