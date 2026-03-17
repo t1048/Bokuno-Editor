@@ -1,6 +1,6 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, Compartment } from '@codemirror/state'
+import { EditorState, Compartment, Annotation } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { findNext, findPrevious } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -10,6 +10,8 @@ import { python } from '@codemirror/lang-python'
 import { markdown } from '@codemirror/lang-markdown'
 import { cpp } from '@codemirror/lang-cpp'
 import './Editor.css'
+
+const isInitialContent = Annotation.define<boolean>()
 
 interface EditorProps {
   initialContent: string
@@ -127,7 +129,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
         })),
         languageCompartmentRef.current.of(getLanguageExtension(fileName)),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged && onChange) {
+          if (update.docChanged && onChange && !update.transactions.some(tr => tr.annotation(isInitialContent))) {
             onChange(update.state.doc.toString())
           }
         }),
@@ -204,6 +206,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
           to: viewRef.current.state.doc.length,
           insert: initialContent,
         },
+        annotations: [isInitialContent.of(true)],
       })
       viewRef.current.dispatch(transaction)
     }
