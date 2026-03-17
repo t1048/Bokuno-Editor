@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icon-gen": "tauri icon public/favicon.svg",
     "tauri dev": "tauri dev",
     "tauri build": "tauri build"
   },
