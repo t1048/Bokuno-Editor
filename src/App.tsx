@@ -94,8 +94,23 @@ function App() {
   const [encoding, setEncoding] = useState('utf-8')
   const [lineEnding, setLineEnding] = useState('CRLF')
   const [searchDirectory, setSearchDirectory] = useState('')
+  const [showPathMenu, setShowPathMenu] = useState(false)
+  const pathMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
+
+  // パスメニュー外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pathMenuRef.current && !pathMenuRef.current.contains(e.target as Node)) {
+        setShowPathMenu(false)
+      }
+    }
+    if (showPathMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showPathMenu])
 
   // Stop any active tail session and clean up listeners
   const stopTail = useCallback(async () => {
@@ -242,21 +257,23 @@ function App() {
   }, [])
 
   // Open file from search result
-  const openSearchResult = useCallback(async (result: SearchResult) => {
+  const openSearchResult = useCallback(async (searchResult: SearchResult) => {
     if (isTailMode) {
       await stopTail()
     }
 
     try {
-      const fileData = await invoke<FileContent>('read_file', { filePath: result.file_path })
-      setFileContent(fileData.content)
-      setFileName(fileData.file_name)
-      setFilePath(fileData.file_path)
+      const result = await invoke<FileContent>('read_file', { 
+        request: { file_path: searchResult.file_path } 
+      })
+      setFileContent(result.content)
+      setFileName(result.file_name)
+      setFilePath(result.file_path)
       setIsModified(false)
-      setSearchDirectory(getDirectoryFromPath(fileData.file_path))
+      setSearchDirectory(getDirectoryFromPath(result.file_path))
       setShowSearch(false)
-      setStatusMessage(`Opened: ${fileData.file_name} at line ${result.line_number}`)
-      setTimeout(() => editorRef.current?.scrollToLine(result.line_number), 0)
+      setStatusMessage(`Opened: ${result.file_name} at line ${searchResult.line_number}`)
+      setTimeout(() => editorRef.current?.scrollToLine(searchResult.line_number), 0)
     } catch (error) {
       setStatusMessage(`Error opening file: ${error}`)
     }
@@ -282,7 +299,9 @@ function App() {
 
       const unlistenRotated = await listen('tail_rotated', async () => {
         try {
-          const result = await invoke<FileContent>('read_file', { filePath })
+          const result = await invoke<FileContent>('read_file', { 
+            request: { file_path: filePath } 
+          })
           setFileContent(result.content)
           setStatusMessage(`Tail: ${result.file_name} (rotated)`)
           // Scroll to bottom after React has re-rendered the new content
@@ -332,7 +351,9 @@ function App() {
         // If file path provided, open it
         if (args.file_path) {
           setStatusMessage('Loading...')
-          const result = await invoke<FileContent>('read_file', { filePath: args.file_path })
+          const result = await invoke<FileContent>('read_file', { 
+            request: { file_path: args.file_path } 
+          })
           setFileContent(result.content)
           setFileName(result.file_name)
           setFilePath(result.file_path)
@@ -381,70 +402,154 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
+  // パスをクリップボードにコピー
+  const handleCopyPath = useCallback(async () => {
+    if (!filePath) return
+    try {
+      await navigator.clipboard.writeText(filePath)
+      setStatusMessage('Path copied to clipboard')
+      setShowPathMenu(false)
+    } catch {
+      setStatusMessage('Failed to copy path')
+    }
+  }, [filePath])
+
+  // エクスプローラーで開く
+  const handleOpenInExplorer = useCallback(async () => {
+    if (!filePath) return
+    try {
+      await invoke('open_in_explorer', { filePath })
+      setStatusMessage('Opened in Explorer')
+      setShowPathMenu(false)
+    } catch (error) {
+      setStatusMessage(`Error: ${error}`)
+    }
+  }, [filePath])
+
   const statusTone = statusMessage.toLowerCase().includes('error') ? 'error' : 'ready'
 
   return (
     <div className="app" data-theme={theme}>
       <header className="toolbar">
-        <div className="toolbar-primary">
-          <div className="document-summary">
-            <div className="document-title-row">
-              <span className="document-title">{fileName || 'Untitled'}</span>
-              <span className={`document-badge ${isModified ? 'warning' : 'neutral'}`}>
-                {isModified ? 'Modified' : 'Saved'}
-              </span>
-              {isTailMode && <span className="document-badge success">Live Tail</span>}
-            </div>
-            <div className="document-path" title={filePath || 'No file open'}>
-              {shortenPath(filePath)}
-            </div>
-          </div>
-
-          <div className="tab-list" role="tablist" aria-label="Editor actions">
-            <button className="tab-button" onClick={handleOpenFile} title="Open File (Ctrl+O)">
-              Open
+        <div className="toolbar-row toolbar-actions-row">
+          <div className="action-group" role="toolbar" aria-label="Editor actions">
+            <button className="action-btn" onClick={handleOpenFile} title="Open File (Ctrl+O)" aria-label="Open File">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
             </button>
             <button
-              className="tab-button"
+              className="action-btn"
               onClick={handleSaveFile}
               disabled={!isModified || isTailMode}
               title="Save (Ctrl+S)"
+              aria-label="Save"
             >
-              Save
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
             </button>
+
+            <div className="action-separator" />
+
             <button
               onClick={isTailMode ? stopTail : startTail}
               disabled={!filePath}
-              title={isTailMode ? 'Stop Tail (Ctrl+T)' : 'Start Tail - monitor file for new content (Ctrl+T)'}
-              className={`tab-button ${isTailMode ? 'btn-tail-active is-active' : ''}`}
+              title={isTailMode ? 'Stop Tail' : 'Start Tail - monitor file for new content'}
+              aria-label={isTailMode ? 'Stop Tail' : 'Start Tail'}
+              className={`action-btn ${isTailMode ? 'action-btn--active-tail' : ''}`}
             >
-              {isTailMode ? 'Stop Tail' : 'Tail'}
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {isTailMode ? (
+                  <>
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </>
+                ) : (
+                  <>
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                    <polyline points="17 6 23 6 23 12" />
+                  </>
+                )}
+              </svg>
             </button>
             <button
               onClick={() => setShowSearch(true)}
-              title="Toggle Search (Ctrl+F)"
-              className={`tab-button ${showSearch ? 'is-active' : ''}`}
+              title="Search (Ctrl+F)"
+              aria-label="Search"
+              className={`action-btn ${showSearch ? 'action-btn--active' : ''}`}
             >
-              Search
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
             </button>
           </div>
-        </div>
 
-        <div className="toolbar-actions">
-          <div className="settings-container">
+          <div className="toolbar-right">
             <button
               onClick={() => setShowSettings((prev) => !prev)}
               title="Settings"
               aria-label="Settings"
-              className={`icon-button settings-button ${showSettings ? 'is-active' : ''}`}
+              className={`action-btn action-btn--settings ${showSettings ? 'action-btn--active' : ''}`}
             >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-                <path
-                  d="M12 2a1 1 0 0 1 1 1v1.08a7.5 7.5 0 0 1 4.41 2.41l.76-.44a1 1 0 0 1 1.27.25l.7.7a1 1 0 0 1 .23 1.12l-.46.88A7.5 7.5 0 0 1 21 12c0 .36-.04.72-.11 1.07l.46.88a1 1 0 0 1-.23 1.12l-.7.7a1 1 0 0 1-1.12.25l-.76-.44A7.5 7.5 0 0 1 13 19.92V21a1 1 0 0 1-2 0v-1.08a7.5 7.5 0 0 1-4.41-2.41l-.76.44a1 1 0 0 1-1.27-.25l-.7-.7a1 1 0 0 1-.23-1.12l.46-.88A7.5 7.5 0 0 1 3 12c0-.36.04-.72.11-1.07l-.46-.88a1 1 0 0 1 .23-1.12l.7-.7a1 1 0 0 1 1.12-.25l.76.44A7.5 7.5 0 0 1 11 4.08V3a1 1 0 0 1 1-1zm0 5a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"
-                  fill="currentColor"
-                />
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </button>
+          </div>
+        </div>
+
+        <div className="toolbar-row toolbar-doc-row">
+          <div className="doc-info">
+            <div className="doc-title-row">
+              <svg className="doc-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span className="doc-title">{fileName || 'Untitled'}</span>
+              <span className={`doc-badge ${isModified ? 'doc-badge--warning' : 'doc-badge--neutral'}`}>
+                {isModified ? 'Modified' : 'Saved'}
+              </span>
+              {isTailMode && <span className="doc-badge doc-badge--success">Live Tail</span>}
+            </div>
+            <div className="doc-path-row" ref={pathMenuRef}>
+              <button
+                className="doc-path-button"
+                onClick={() => filePath && setShowPathMenu(prev => !prev)}
+                disabled={!filePath}
+                title={filePath || 'No file open'}
+              >
+                <span className="doc-path-text">{shortenPath(filePath)}</span>
+                {filePath && (
+                  <svg className="doc-path-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
+              </button>
+              {showPathMenu && (
+                <div className="path-dropdown">
+                  <button className="path-dropdown-item" onClick={handleCopyPath}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    パスをコピー
+                  </button>
+                  <button className="path-dropdown-item" onClick={handleOpenInExplorer}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    エクスプローラーで開く
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -578,7 +683,6 @@ function App() {
           </span>
           <span className="status-pill">{lineEnding}</span>
           <span className="status-pill">Font {fontSize}px</span>
-          {/* <span className="status-pill shortcuts">Ctrl+O Open  Ctrl+S Save  Ctrl+F Search  Ctrl+T Tail</span> */}
         </div>
       </footer>
     </div>

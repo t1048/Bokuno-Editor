@@ -378,6 +378,23 @@ async fn stop_tail(watcher: tauri::State<'_, TailWatcher>) -> Result<(), String>
     Ok(())
 }
 
+/// Open the containing folder of a file in Windows Explorer, with the file selected.
+#[tauri::command]
+async fn open_in_explorer(file_path: String) -> Result<(), String> {
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("Path not found: {}", file_path));
+    }
+
+    // Use explorer.exe /select to open the folder with the file highlighted
+    std::process::Command::new("explorer.exe")
+        .args([&format!("/select,{}", file_path)])
+        .spawn()
+        .map_err(|e| format!("Failed to open explorer: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut log_builder = tauri_plugin_log::Builder::new();
@@ -397,6 +414,7 @@ pub fn run() {
             get_cli_args,
             start_tail,
             stop_tail,
+            open_in_explorer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

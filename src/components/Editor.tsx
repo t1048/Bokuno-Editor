@@ -8,6 +8,7 @@ import { javascript } from '@codemirror/lang-javascript'
 import { rust } from '@codemirror/lang-rust'
 import { python } from '@codemirror/lang-python'
 import { markdown } from '@codemirror/lang-markdown'
+import { cpp } from '@codemirror/lang-cpp'
 import './Editor.css'
 
 interface EditorProps {
@@ -42,6 +43,14 @@ const getLanguageExtension = (fileName: string) => {
     case 'md':
     case 'markdown':
       return markdown()
+    case 'cpp':
+    case 'cc':
+    case 'cxx':
+    case 'c':
+    case 'h':
+    case 'hpp':
+    case 'hxx':
+      return cpp()
     default:
       return []
   }
@@ -53,6 +62,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
   const themeCompartmentRef = useRef(new Compartment())
   const readOnlyCompartmentRef = useRef(new Compartment())
   const fontSizeCompartmentRef = useRef(new Compartment())
+  const languageCompartmentRef = useRef(new Compartment())
 
   useImperativeHandle(ref, () => ({
     getContent: () => {
@@ -90,8 +100,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
   useEffect(() => {
     if (!editorRef.current) return
 
-    const languageExtension = getLanguageExtension(fileName)
-
     const state = EditorState.create({
       doc: initialContent,
       extensions: [
@@ -117,7 +125,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
             borderRight: '1px solid transparent',
           },
         })),
-        languageExtension,
+        languageCompartmentRef.current.of(getLanguageExtension(fileName)),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange) {
             onChange(update.state.doc.toString())
@@ -178,6 +186,14 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, fileName, t
       })),
     })
   }, [fontSize])
+
+  // Update language when fileName changes (file opened)
+  useEffect(() => {
+    if (!viewRef.current) return
+    viewRef.current.dispatch({
+      effects: languageCompartmentRef.current.reconfigure(getLanguageExtension(fileName)),
+    })
+  }, [fileName])
 
   // Update content when initialContent changes (file opened)
   useEffect(() => {
