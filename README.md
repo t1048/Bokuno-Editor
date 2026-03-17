@@ -1,42 +1,44 @@
 # Bokuno-Editor
 
-Tauri、React、CodeMirrorで構築された軽量なクロスプラットフォーム対応デスクトップコードエディタです。
+OSに深く統合され、極限まで「軽さ」と「速さ」を追求した次世代テキストエディタ＆高速検索ツールです。
+機能を開発者に必要なものに絞り込むことで、圧倒的な起動速度と低メモリ消費を実現しています。
 
-## 機能
+## 特徴
 
-- **多言語サポート** - JavaScript、Markdown、Python、Rust
-- **シンタックスハイライト** - CodeMirror 6を採用
-- **ダークテーマ** - One Darkテーマ搭載
-- **検索機能** - 置換付きのコード検索
-- **デスクトップネイティブ** - Tauriによるネイティブパフォーマンス
+- **圧倒的な軽量・高速動作**: Tauri (Rust) を基盤とし、Chromiumを同梱しないことで、瞬時の起動と軽快な動作を実現。
+- **Live Tail (ログ監視)**: ファイルの末尾をリアルタイムに追従して表示。サーバーログやアプリケーションログの監視に最適。
+- **高速全文検索 (Grep)**: Rust製の検索エンジンにより、大規模なプロジェクト内も一瞬で全文検索。
+- **シンタックスハイライト**: CodeMirror 6を採用し、Markdown, Python, C++, Rust, JavaScriptなどの主要言語に対応。
+- **OS統合 (Windows)**: エクスプローラーの右クリックメニューから、ファイルを手軽に開いたり、フォルダ内を即座にGrep検索可能。
+- **モダンなUI/UX**: シンプルかつ直感的なインターフェース。ダークモード完備。
 
 ## 技術スタック
 
-- **フロントエンド**: React 19 + TypeScript + Vite
-- **エディタ**: CodeMirror 6
-- **バックエンド**: Tauri 2 (Rust)
-- **スタイリング**: Tailwind CSS
+- **コア (バックエンド)**: [Tauri 2](https://tauri.app/) (Rust) - メモリセーフで高速。
+- **UI (フロントエンド)**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
+- **エディタエンジン**: [CodeMirror 6](https://codemirror.net/) - モジュール式で超軽量。
+- **スタイリング**: [Tailwind CSS 4](https://tailwindcss.com/) - 最適化されたユーティリティファーストCSS。
 
-## はじめに
-
-### 前提条件
-
-- Node.js 18以上
-- Rust（最新安定版）
-- npm または pnpm
+## 使い方
 
 ### インストール
 
 ```bash
-# 依存関係をインストール
+# 依存関係のインストール
 npm install
 
-# 開発モードで実行
+# 開発モードで起動
 npm run tauri dev
 
-# 本番ビルド
+# 本番用バイナリのビルド
 npm run tauri build
 ```
+
+### 便利機能
+- **Ctrl + O**: ファイルを開く
+- **Ctrl + S**: 保存
+- **Ctrl + F**: 検索パネル（Grep）の表示
+- **マウスホイール + Ctrl**: フォントサイズの変更
 
 ## スクリーンショット
 
@@ -44,4 +46,4 @@ npm run tauri build
 
 ## ライセンス
 
-MIT
+MITライセンス

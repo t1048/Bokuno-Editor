@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import Editor, { type EditorRef } from './components/Editor'
 import SearchPanel from './components/SearchPanel'
@@ -99,6 +100,38 @@ function App() {
   const pathMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
+  const isModifiedRef = useRef(isModified)
+
+  // Sync isModifiedRef with isModified state for use in event listeners
+  useEffect(() => {
+    isModifiedRef.current = isModified
+  }, [isModified])
+
+  // Intercept window close request if there are unsaved changes
+  useEffect(() => {
+    if (!isTauri()) return
+
+    const setupCloseHandler = async () => {
+      const unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+        if (isModifiedRef.current) {
+          event.preventDefault()
+          const confirmed = await ask(
+            '変更が保存されていません。保存せずに終了しますか？',
+            { title: 'Bokuno Editor', kind: 'warning', okLabel: 'はい', cancelLabel: 'いいえ' }
+          )
+          if (confirmed) {
+            await getCurrentWindow().destroy()
+          }
+        }
+      })
+      return unlisten
+    }
+
+    const unlistenPromise = setupCloseHandler()
+    return () => {
+      unlistenPromise.then(unlisten => unlisten())
+    }
+  }, [])
 
   // パスメニュー外クリックで閉じる
   useEffect(() => {

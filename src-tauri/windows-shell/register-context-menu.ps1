@@ -10,6 +10,12 @@ $menuSubKeys = @(
   'Software\Classes\*\shell\BokunoEditor'
 )
 
+$grepMenuSubKeys = @(
+  'Software\Classes\Directory\shell\BokunoEditorGrep',
+  'Software\Classes\Directory\Background\shell\BokunoEditorGrep',
+  'Software\Classes\Drive\shell\BokunoEditorGrep'
+)
+
 $candidateExePaths = @(
   (Join-Path $PSScriptRoot 'Bokuno-Editor.exe'),
   (Join-Path (Split-Path -Parent $PSScriptRoot) 'Bokuno-Editor.exe')
@@ -24,6 +30,10 @@ Write-Host "Executable: $exePath"
 
 $menuLabel = 'Bokuno-Editor{0}{1}{2}' -f [char]0x3067, [char]0x958B, [char]0x304F
 $commandValue = '"{0}" "%1"' -f $exePath
+
+$grepMenuLabel = 'Bokuno-Editor{0}Grep' -f [char]0x3067
+$grepCommandValueFile = '"{0}" --search="%1"' -f $exePath
+$grepCommandValueBackground = '"{0}" --search="%V"' -f $exePath
 
 function Write-Step {
   param([string]$Message)
@@ -87,13 +97,34 @@ foreach ($subKey in $menuSubKeys) {
   }
 }
 
+foreach ($subKey in $grepMenuSubKeys) {
+  $displayKey = "HKCU:\$subKey"
+  Write-Step "Target Grep key: $displayKey"
+
+  $currentGrepCommand = if ($subKey -like '*Background*') { $grepCommandValueBackground } else { $grepCommandValueFile }
+
+  try {
+    Set-RegistryContextMenu -SubKeyPath $subKey -ExecutablePath $exePath -CommandValue $currentGrepCommand -MenuLabel $grepMenuLabel
+    $registeredKeys += $displayKey
+    Write-Step "Registered: $displayKey"
+  }
+  catch {
+    $failedEntries += [PSCustomObject]@{
+      Key = $displayKey
+      Error = $_.Exception.Message
+    }
+    Write-Host "Failed: $displayKey" -ForegroundColor Red
+    Write-Host "Reason: $($_.Exception.Message)" -ForegroundColor Red
+  }
+}
+
 if ($failedEntries.Count -gt 0) {
   Write-Host 'Context menu registration failed.' -ForegroundColor Red
   Write-Host "Success: $($registeredKeys.Count) / Failed: $($failedEntries.Count)"
   throw "Context menu registration failed."
 }
 
-Write-Host "Context menu entry was registered: $menuLabel" -ForegroundColor Green
+Write-Host "Context menu entries were registered." -ForegroundColor Green
 Write-Host "Registered keys: $($registeredKeys -join ', ')"
 Write-Host "Executable: $exePath"
 Write-Host 'Completed.'

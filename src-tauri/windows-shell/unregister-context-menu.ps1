@@ -2,7 +2,10 @@ $ErrorActionPreference = 'Stop'
 
 $menuSubKeys = @(
   'Software\Classes\SystemFileAssociations\text\shell\BokunoEditor',
-  'Software\Classes\*\shell\BokunoEditor'
+  'Software\Classes\*\shell\BokunoEditor',
+  'Software\Classes\Directory\shell\BokunoEditorGrep',
+  'Software\Classes\Directory\Background\shell\BokunoEditorGrep',
+  'Software\Classes\Drive\shell\BokunoEditorGrep'
 )
 
 $menuLabel = 'Bokuno-Editor{0}{1}{2}' -f [char]0x3067, [char]0x958B, [char]0x304F
