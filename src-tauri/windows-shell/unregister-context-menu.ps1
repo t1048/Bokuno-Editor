@@ -3,6 +3,9 @@ $ErrorActionPreference = 'Stop'
 $menuSubKeys = @(
   'Software\Classes\SystemFileAssociations\text\shell\BokunoEditor',
   'Software\Classes\*\shell\BokunoEditor',
+  'Software\Classes\Directory\shell\BokunoEditorWorkspace',
+  'Software\Classes\Directory\Background\shell\BokunoEditorWorkspace',
+  'Software\Classes\Drive\shell\BokunoEditorWorkspace',
   'Software\Classes\Directory\shell\BokunoEditorGrep',
   'Software\Classes\Directory\Background\shell\BokunoEditorGrep',
   'Software\Classes\Drive\shell\BokunoEditorGrep'

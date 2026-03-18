@@ -308,6 +308,7 @@ async fn get_file_info(file_path: String) -> Result<serde_json::Value, String> {
 #[derive(Serialize, Clone)]
 struct CliArgs {
     file_path: Option<String>,
+    folder_path: Option<String>,
     line_number: Option<usize>,
     search_directory: Option<String>,
     search_mode: bool,
@@ -321,6 +322,7 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     
     // Parse arguments
     let mut file_path = None;
+    let mut folder_path = None;
     let mut line_number = None;
     let mut search_directory = None;
     let mut search_mode = false;
@@ -330,6 +332,8 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     for arg in &args[1..] {
         if arg.starts_with("--file=") {
             file_path = Some(arg[7..].to_string());
+        } else if arg.starts_with("--folder=") {
+            folder_path = Some(arg[9..].to_string());
         } else if arg.starts_with("--line=") {
             line_number = arg[7..].parse().ok();
         } else if arg == "--search-mode" {
@@ -342,14 +346,20 @@ async fn get_cli_args() -> Result<CliArgs, String> {
             search_cs = &arg[5..] == "true";
         } else if arg.starts_with("--search=") {
             search_directory = Some(arg[9..].to_string());
-        } else if !arg.starts_with("--") && file_path.is_none() {
-            // First positional argument is treated as file path
-            file_path = Some(arg.clone());
+        } else if !arg.starts_with("--") && file_path.is_none() && folder_path.is_none() {
+            // First positional argument
+            let path = Path::new(arg);
+            if path.is_dir() {
+                folder_path = Some(arg.clone());
+            } else {
+                file_path = Some(arg.clone());
+            }
         }
     }
     
     Ok(CliArgs {
         file_path,
+        folder_path,
         line_number,
         search_directory,
         search_mode,

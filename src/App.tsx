@@ -21,6 +21,7 @@ interface FileContent {
 
 interface CliArgs {
   file_path: string | null
+  folder_path: string | null
   line_number: number | null
   search_directory: string | null
   search_mode: boolean
@@ -461,6 +462,13 @@ function App() {
       try {
         const args = await invoke<CliArgs>('get_cli_args')
         
+        // If folder path provided, open it in sidebar
+        if (args.folder_path) {
+          setFolderPath(args.folder_path)
+          setShowSidebar(true)
+          setStatusMessage(`Opened folder: ${args.folder_path}`)
+        }
+
         // If file path provided, open it
         if (args.file_path) {
           setStatusMessage('Loading...')

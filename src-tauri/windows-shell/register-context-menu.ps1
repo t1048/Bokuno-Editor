@@ -10,6 +10,12 @@ $menuSubKeys = @(
   'Software\Classes\*\shell\BokunoEditor'
 )
 
+$folderMenuSubKeys = @(
+  'Software\Classes\Directory\shell\BokunoEditorWorkspace',
+  'Software\Classes\Directory\Background\shell\BokunoEditorWorkspace',
+  'Software\Classes\Drive\shell\BokunoEditorWorkspace'
+)
+
 $grepMenuSubKeys = @(
   'Software\Classes\Directory\shell\BokunoEditorGrep',
   'Software\Classes\Directory\Background\shell\BokunoEditorGrep',
@@ -30,6 +36,9 @@ Write-Host "Executable: $exePath"
 
 $menuLabel = 'Bokuno-Editor{0}{1}{2}' -f [char]0x3067, [char]0x958B, [char]0x304F
 $commandValue = '"{0}" "%1"' -f $exePath
+
+$folderCommandValueFile = '"{0}" --folder="%1"' -f $exePath
+$folderCommandValueBackground = '"{0}" --folder="%V"' -f $exePath
 
 $grepMenuLabel = 'Bokuno-Editor{0}Grep' -f [char]0x3067
 $grepCommandValueFile = '"{0}" --search="%1"' -f $exePath
@@ -84,6 +93,27 @@ foreach ($subKey in $menuSubKeys) {
 
   try {
     Set-RegistryContextMenu -SubKeyPath $subKey -ExecutablePath $exePath -CommandValue $commandValue -MenuLabel $menuLabel
+    $registeredKeys += $displayKey
+    Write-Step "Registered: $displayKey"
+  }
+  catch {
+    $failedEntries += [PSCustomObject]@{
+      Key = $displayKey
+      Error = $_.Exception.Message
+    }
+    Write-Host "Failed: $displayKey" -ForegroundColor Red
+    Write-Host "Reason: $($_.Exception.Message)" -ForegroundColor Red
+  }
+}
+
+foreach ($subKey in $folderMenuSubKeys) {
+  $displayKey = "HKCU:\$subKey"
+  Write-Step "Target Folder key: $displayKey"
+
+  $currentFolderCommand = if ($subKey -like '*Background*') { $folderCommandValueBackground } else { $folderCommandValueFile }
+
+  try {
+    Set-RegistryContextMenu -SubKeyPath $subKey -ExecutablePath $exePath -CommandValue $currentFolderCommand -MenuLabel $menuLabel
     $registeredKeys += $displayKey
     Write-Step "Registered: $displayKey"
   }
