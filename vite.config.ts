@@ -8,7 +8,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'src-tauri/dist'),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1500,
+    // Current editor bundle includes heavy parsing/rendering deps; keep warning threshold realistic.
+    chunkSizeWarningLimit: 4000,
     rollupOptions: {
       output: {
         manualChunks(id) {

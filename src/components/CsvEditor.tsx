@@ -1,19 +1,9 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 // @ts-ignore
-import * as ReactWindowModule from 'react-window';
-// @ts-ignore
-import * as AutoSizerModule from 'react-virtualized-auto-sizer';
+import { Grid, List } from 'react-window';
 import Papa from 'papaparse';
 import { invoke } from '@tauri-apps/api/core';
 import './CsvEditor.css';
-
-// Workaround for import issues in some environments (Vite/Rolldown CJS interop)
-const RW: any = (ReactWindowModule as any).default || ReactWindowModule;
-const FixedSizeGrid = RW.FixedSizeGrid;
-const FixedSizeList = RW.FixedSizeList;
-
-const AS: any = (AutoSizerModule as any).default || AutoSizerModule;
-const AutoSizer = AS;
 
 interface CsvEditorProps {
   content: string;
@@ -37,30 +27,74 @@ function getColumnName(index: number) {
   return name;
 }
 
-interface CellProps {
+interface CellDataProps {
+  data: string[][];
+  onCellChange: (r: number, c: number, v: string) => void;
+}
+
+interface CellProps extends CellDataProps {
   columnIndex: number;
   rowIndex: number;
   style: React.CSSProperties;
-  data: {
-    data: string[][];
-    onCellChange: (r: number, c: number, v: string) => void;
+  ariaAttributes: {
+    'aria-colindex': number;
+    role: 'gridcell';
   };
 }
 
-const Cell = memo(({ columnIndex, rowIndex, style, data }: CellProps) => {
-  const value = data.data[rowIndex]?.[columnIndex] || '';
+function Cell({ columnIndex, rowIndex, style, ariaAttributes, data, onCellChange }: CellProps) {
+  const value = data[rowIndex]?.[columnIndex] || '';
   
   return (
-    <div className="csv-cell" style={style}>
+    <div className="csv-cell" style={style} {...ariaAttributes}>
       <input
         type="text"
         value={value}
-        onChange={(e) => data.onCellChange(rowIndex, columnIndex, e.target.value)}
+        onChange={(e) => onCellChange(rowIndex, columnIndex, e.target.value)}
         className="csv-input"
       />
     </div>
   );
-});
+}
+
+interface HeaderCellProps {
+  columnIndex: number;
+  style: React.CSSProperties;
+  ariaAttributes: {
+    'aria-colindex': number;
+    role: 'gridcell';
+  };
+}
+
+function HeaderCell({ columnIndex, style, ariaAttributes }: HeaderCellProps) {
+  return (
+    <div className="csv-cell-header csv-col-header" style={style} {...ariaAttributes}>
+      <div className="csv-header-content">
+        <span className="csv-header-title">{getColumnName(columnIndex)}</span>
+      </div>
+    </div>
+  );
+}
+
+interface RowHeaderProps {
+  index: number;
+  style: React.CSSProperties;
+  ariaAttributes: {
+    'aria-posinset': number;
+    'aria-setsize': number;
+    role: 'listitem';
+  };
+}
+
+function RowHeader({ index, style, ariaAttributes }: RowHeaderProps) {
+  return (
+    <div className="csv-cell-header csv-row-header" style={style} {...ariaAttributes}>
+      <div className="csv-header-content">
+        <span className="csv-header-title">{index + 1}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function CsvEditor({ content, filePath, theme, onChange }: CsvEditorProps) {
   const [data, setData] = useState<string[][]>([['']]);
@@ -70,12 +104,17 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
   const gridRef = useRef<any>(null);
   const headerRef = useRef<any>(null);
   const sideRef = useRef<any>(null);
-  const canUseLegacyVirtualGrid = Boolean(FixedSizeGrid && FixedSizeList && AutoSizer);
+  const canUseVirtualGrid = true;
 
   // Sync scrolling
-  const onScroll = useCallback(({ scrollLeft, scrollTop }: { scrollLeft: number; scrollTop: number }) => {
-    headerRef.current?.scrollTo(scrollLeft);
-    sideRef.current?.scrollTo(scrollTop);
+  const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollLeft, scrollTop } = event.currentTarget;
+    if (headerRef.current?.element && headerRef.current.element.scrollLeft !== scrollLeft) {
+      headerRef.current.element.scrollLeft = scrollLeft;
+    }
+    if (sideRef.current?.element && sideRef.current.element.scrollTop !== scrollTop) {
+      sideRef.current.element.scrollTop = scrollTop;
+    }
   }, []);
 
   const loadStreaming = useCallback(async (path: string) => {
@@ -143,7 +182,7 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
   const rowCount = data.length;
   const colCount = data[0]?.length || 0;
 
-  if (!canUseLegacyVirtualGrid) {
+  if (!canUseVirtualGrid) {
     return (
       <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`}>
         {loadError && <div className="csv-error-banner">{loadError}</div>}
@@ -185,104 +224,89 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
     <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`}>
       {loadError && <div className="csv-error-banner">{loadError}</div>}
       <div className="csv-virtual-container">
-        <AutoSizer>
-          {({ height, width }: any) => (
-            <div style={{ position: 'relative', width, height }}>
-              {/* Corner */}
-              <div 
-                className="csv-cell-header csv-corner" 
-                style={{ 
-                    position: 'absolute', 
-                    top: 0, 
-                    left: 0, 
-                    width: HEADER_WIDTH, 
-                    height: HEADER_HEIGHT,
-                    zIndex: 30
-                }} 
-              />
-              
-              {/* Column Headers (Horizontal List) */}
-              <div style={{ 
-                  position: 'absolute', 
-                  top: 0, 
-                  left: HEADER_WIDTH, 
-                  width: width - HEADER_WIDTH, 
-                  height: HEADER_HEIGHT,
-                  overflow: 'hidden',
-                  zIndex: 20
-              }}>
-                <FixedSizeList
-                  ref={headerRef}
-                  height={HEADER_HEIGHT}
-                  itemCount={colCount}
-                  itemSize={COL_WIDTH}
-                  layout="horizontal"
-                  width={width - HEADER_WIDTH}
-                  style={{ overflow: 'hidden' }}
-                >
-                  {({ index, style }: any) => (
-                    <div className="csv-cell-header csv-col-header" style={style}>
-                      <div className="csv-header-content">
-                        <span className="csv-header-title">{getColumnName(index)}</span>
-                      </div>
-                    </div>
-                  )}
-                </FixedSizeList>
-              </div>
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <div
+            className="csv-cell-header csv-corner"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: HEADER_WIDTH,
+              height: HEADER_HEIGHT,
+              zIndex: 30,
+            }}
+          />
 
-              {/* Row Headers (Vertical List) */}
-              <div style={{ 
-                  position: 'absolute', 
-                  top: HEADER_HEIGHT, 
-                  left: 0, 
-                  width: HEADER_WIDTH, 
-                  height: height - HEADER_HEIGHT,
-                  overflow: 'hidden',
-                  zIndex: 20
-              }}>
-                <FixedSizeList
-                  ref={sideRef}
-                  height={height - HEADER_HEIGHT}
-                  itemCount={rowCount}
-                  itemSize={ROW_HEIGHT}
-                  width={HEADER_WIDTH}
-                  style={{ overflow: 'hidden' }}
-                >
-                  {({ index, style }: any) => (
-                    <div className="csv-cell-header csv-row-header" style={style}>
-                      <div className="csv-header-content">
-                        <span className="csv-header-title">{index + 1}</span>
-                      </div>
-                    </div>
-                  )}
-                </FixedSizeList>
-              </div>
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: HEADER_WIDTH,
+              width: `calc(100% - ${HEADER_WIDTH}px)`,
+              height: HEADER_HEIGHT,
+              zIndex: 20,
+              overflow: 'hidden',
+            }}
+          >
+            <Grid
+              gridRef={headerRef}
+              columnCount={colCount}
+              columnWidth={COL_WIDTH}
+              defaultHeight={HEADER_HEIGHT}
+              defaultWidth={COL_WIDTH * 3}
+              rowCount={1}
+              rowHeight={HEADER_HEIGHT}
+              style={{ overflow: 'hidden' }}
+              cellComponent={HeaderCell}
+              cellProps={{} as any}
+            />
+          </div>
 
-              {/* Main Grid */}
-              <div style={{ 
-                  position: 'absolute', 
-                  top: HEADER_HEIGHT, 
-                  left: HEADER_WIDTH, 
-                  width: width - HEADER_WIDTH, 
-                  height: height - HEADER_HEIGHT 
-              }}>
-                <FixedSizeGrid
-                  ref={gridRef}
-                  columnCount={colCount}
-                  columnWidth={COL_WIDTH}
-                  height={height - HEADER_HEIGHT}
-                  rowCount={rowCount}
-                  rowHeight={ROW_HEIGHT}
-                  width={width - HEADER_WIDTH}
-                  onScroll={onScroll}
-                  itemData={{ data, onCellChange: handleCellChange }}
-                >
-                  {Cell}
-                </FixedSizeGrid>
-              </div>
-            </div>
-          )}
-        </AutoSizer>
+          <div
+            style={{
+              position: 'absolute',
+              top: HEADER_HEIGHT,
+              left: 0,
+              width: HEADER_WIDTH,
+              height: `calc(100% - ${HEADER_HEIGHT}px)`,
+              zIndex: 20,
+              overflow: 'hidden',
+            }}
+          >
+            <List
+              listRef={sideRef}
+              rowCount={rowCount}
+              rowHeight={ROW_HEIGHT}
+              defaultHeight={ROW_HEIGHT * 10}
+              style={{ overflow: 'hidden' }}
+              rowComponent={RowHeader}
+              rowProps={{} as any}
+            />
+          </div>
+
+          <div
+            style={{
+              position: 'absolute',
+              top: HEADER_HEIGHT,
+              left: HEADER_WIDTH,
+              width: `calc(100% - ${HEADER_WIDTH}px)`,
+              height: `calc(100% - ${HEADER_HEIGHT}px)`,
+            }}
+          >
+            <Grid
+              gridRef={gridRef}
+              columnCount={colCount}
+              columnWidth={COL_WIDTH}
+              defaultHeight={ROW_HEIGHT * 10}
+              defaultWidth={COL_WIDTH * 3}
+              rowCount={rowCount}
+              rowHeight={ROW_HEIGHT}
+              onScroll={onScroll}
+              cellComponent={Cell}
+              cellProps={{ data, onCellChange: handleCellChange } as any}
+            />
+          </div>
+        </div>
       </div>
       {isLoading && <div className="csv-loading-overlay">読み込み中...</div>}
     </div>
