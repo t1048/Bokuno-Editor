@@ -258,7 +258,11 @@ async fn get_file_info(file_path: String) -> Result<serde_json::Value, String> {
 #[derive(Serialize, Clone)]
 struct CliArgs {
     file_path: Option<String>,
+    line_number: Option<usize>,
     search_directory: Option<String>,
+    search_mode: bool,
+    search_pattern: Option<String>,
+    search_cs: bool,
 }
 
 #[tauri::command]
@@ -266,14 +270,26 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     let args: Vec<String> = std::env::args().collect();
     
     // Parse arguments
-    // --file=<path> or first positional argument = file to open
-    // --search=<directory> = directory to search
     let mut file_path = None;
+    let mut line_number = None;
     let mut search_directory = None;
+    let mut search_mode = false;
+    let mut search_pattern = None;
+    let mut search_cs = false;
     
     for arg in &args[1..] {
         if arg.starts_with("--file=") {
             file_path = Some(arg[7..].to_string());
+        } else if arg.starts_with("--line=") {
+            line_number = arg[7..].parse().ok();
+        } else if arg == "--search-mode" {
+            search_mode = true;
+        } else if arg.starts_with("--dir=") {
+            search_directory = Some(arg[6..].to_string());
+        } else if arg.starts_with("--pattern=") {
+            search_pattern = Some(arg[10..].to_string());
+        } else if arg.starts_with("--cs=") {
+            search_cs = &arg[5..] == "true";
         } else if arg.starts_with("--search=") {
             search_directory = Some(arg[9..].to_string());
         } else if !arg.starts_with("--") && file_path.is_none() {
@@ -284,7 +300,11 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     
     Ok(CliArgs {
         file_path,
+        line_number,
         search_directory,
+        search_mode,
+        search_pattern,
+        search_cs,
     })
 }
 
@@ -414,6 +434,37 @@ async fn open_in_explorer(file_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn spawn_search_window(directory: String, pattern: String, case_sensitive: bool) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("--search-mode");
+    cmd.arg(format!("--dir={}", directory));
+    cmd.arg(format!("--pattern={}", pattern));
+    cmd.arg(format!("--cs={}", case_sensitive));
+    
+    cmd.spawn().map_err(|e| format!("Failed to spawn search window: {}", e))?;
+        
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_file_in_new_window(file_path: String, line: Option<usize>) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg(format!("--file={}", file_path));
+    
+    if let Some(l) = line {
+        cmd.arg(format!("--line={}", l));
+    }
+    
+    cmd.spawn().map_err(|e| format!("Failed to open file in new window: {}", e))?;
+        
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut log_builder = tauri_plugin_log::Builder::new();
@@ -434,6 +485,8 @@ pub fn run() {
             start_tail,
             stop_tail,
             open_in_explorer,
+            spawn_search_window,
+            open_file_in_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

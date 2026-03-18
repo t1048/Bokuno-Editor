@@ -1,18 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import './SearchPanel.css'
 
-interface SearchResult {
-  file_path: string
-  line_number: number
-  line_content: string
-  matched_range: [number, number]
-}
-
 interface SearchPanelProps {
-  results: SearchResult[]
-  isSearching: boolean
   onSearch: (directory: string, pattern: string, caseSensitive: boolean) => void
-  onResultClick: (result: SearchResult) => void
   onClose: () => void
   initialDirectory?: string
   currentPath?: string
@@ -24,10 +14,7 @@ const getDirectoryFromPath = (fullPath: string) => {
 }
 
 function SearchPanel({
-  results,
-  isSearching,
   onSearch,
-  onResultClick,
   onClose,
   initialDirectory = '',
   currentPath = '',
@@ -63,34 +50,7 @@ function SearchPanel({
     }
   }
 
-  const highlightMatch = (line: string, range: [number, number]) => {
-    const [start, end] = range
-    const before = line.slice(0, start)
-    const match = line.slice(start, end)
-    const after = line.slice(end)
-    
-    return (
-      <>
-        {before}
-        <mark className="search-highlight">{match}</mark>
-        {after}
-      </>
-    )
-  }
-
-  const getRelativePath = (fullPath: string) => {
-    const parts = fullPath.split(/[/\\]/)
-    return parts.slice(-2).join('/')
-  }
-
   const currentDirectory = useMemo(() => getDirectoryFromPath(currentPath), [currentPath])
-  const resultSummary = isSearching
-    ? 'Searching workspace...'
-    : results.length > 0
-      ? `${results.length} matches`
-      : pattern
-        ? 'No matches found'
-        : 'Search across a directory'
 
   return (
     <div className="search-panel">
@@ -149,42 +109,12 @@ function SearchPanel({
         <button
           className="search-btn" 
           onClick={handleSearch}
-          disabled={isSearching || !directory || !pattern}
+          disabled={!directory || !pattern}
         >
-          {isSearching ? 'Searching...' : 'Run search'}
+          Run search
         </button>
 
-        <div className="search-hint">Enter to search. Escape to close.</div>
-      </div>
-
-      <div className="search-results">
-        <div className="results-header">
-          <span>{resultSummary}</span>
-          {directory && <span className="results-scope">{getRelativePath(directory)}</span>}
-        </div>
-
-        <div className="results-list">
-          {results.map((result, index) => (
-            <div
-              key={`${result.file_path}-${result.line_number}-${index}`}
-              className="result-item"
-              onClick={() => onResultClick(result)}
-            >
-              <div className="result-file">
-                {getRelativePath(result.file_path)}:{result.line_number}
-              </div>
-              <div className="result-line">
-                {highlightMatch(result.line_content, result.matched_range)}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {results.length === 0 && !isSearching && (
-          <div className="no-results">
-            {pattern ? 'No matches found for the current pattern.' : 'Pick a directory and search term to explore your files.'}
-          </div>
-        )}
+        <div className="search-hint">Enter to run search in a new window. Escape to close.</div>
       </div>
     </div>
   )

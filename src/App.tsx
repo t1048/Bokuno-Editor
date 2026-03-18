@@ -7,6 +7,7 @@ import Editor, { type EditorRef } from './components/Editor'
 import MarkdownPreview from './components/MarkdownPreview'
 import CsvEditor from './components/CsvEditor'
 import SearchPanel from './components/SearchPanel'
+import SearchResultsView from './components/SearchResultsView'
 import Icon from './components/Icon'
 import './App.css'
 
@@ -17,16 +18,13 @@ interface FileContent {
   encoding: string
 }
 
-interface SearchResult {
-  file_path: string
-  line_number: number
-  line_content: string
-  matched_range: [number, number]
-}
-
 interface CliArgs {
   file_path: string | null
+  line_number: number | null
   search_directory: string | null
+  search_mode: boolean
+  search_pattern: string | null
+  search_cs: boolean
 }
 
 interface ReadRequest {
@@ -100,8 +98,8 @@ function App() {
   const [isModified, setIsModified] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [isSearching, setIsSearching] = useState(false)
+  const [appMode, setAppMode] = useState<'editor' | 'search'>('editor')
+  const [searchParams, setSearchParams] = useState({ pattern: '', caseSensitive: false })
   const [statusMessage, setStatusMessage] = useState('Ready')
   const [theme, setTheme] = useState<Theme>('light')
   const [isTailMode, setIsTailMode] = useState(false)
@@ -305,50 +303,17 @@ function App() {
 
   // Handle search
   const handleSearch = useCallback(async (directory: string, pattern: string, caseSensitive: boolean) => {
-    setIsSearching(true)
-    setSearchDirectory(directory)
-    setStatusMessage('Searching...')
-    
     try {
-      const results = await invoke<SearchResult[]>('search_in_directory', {
-        request: {
-          directory,
-          pattern,
-          case_sensitive: caseSensitive,
-        }
+      await invoke('spawn_search_window', {
+        directory,
+        pattern,
+        caseSensitive
       })
-      setSearchResults(results)
-      setStatusMessage(`Found ${results.length} matches`)
+      setShowSearch(false)
     } catch (error) {
       setStatusMessage(`Search error: ${error}`)
-    } finally {
-      setIsSearching(false)
     }
   }, [])
-
-  // Open file from search result
-  const openSearchResult = useCallback(async (searchResult: SearchResult) => {
-    if (isTailMode) {
-      await stopTail()
-    }
-
-    try {
-      const result = await invoke<FileContent>('read_file', { 
-        request: { file_path: searchResult.file_path } 
-      })
-      setFileContent(result.content)
-      setFileName(result.file_name)
-      setFilePath(result.file_path)
-      setEncoding(result.encoding)
-      setIsModified(false)
-      setSearchDirectory(getDirectoryFromPath(result.file_path))
-      setShowSearch(false)
-      setStatusMessage(`Opened: ${result.file_name} at line ${searchResult.line_number}`)
-      setTimeout(() => editorRef.current?.scrollToLine(searchResult.line_number), 0)
-    } catch (error) {
-      setStatusMessage(`Error opening file: ${error}`)
-    }
-  }, [isTailMode, stopTail])
 
   // Start tail mode – watch the open file for new content
   const startTail = useCallback(async () => {
@@ -433,10 +398,18 @@ function App() {
           setIsModified(false)
           setSearchDirectory(getDirectoryFromPath(result.file_path))
           setStatusMessage(`Opened: ${result.file_name}`)
+          
+          if (args.line_number) {
+            setTimeout(() => editorRef.current?.scrollToLine(args.line_number!), 100)
+          }
         }
         
-        // If search directory provided, open search panel with it
-        if (args.search_directory) {
+        if (args.search_mode && args.search_directory && args.search_pattern) {
+          setAppMode('search')
+          setSearchDirectory(args.search_directory)
+          setSearchParams({ pattern: args.search_pattern, caseSensitive: args.search_cs })
+        } else if (args.search_directory && !args.search_mode) {
+          // If search directory provided, open search panel with it
           setSearchDirectory(args.search_directory)
           setShowSearch(true)
         }
@@ -620,7 +593,14 @@ function App() {
       <div className="main-content">
         <section className="workspace-main">
           <div className="editor-frame">
-            {(isMarkdown || isCsv) && previewMode ? (
+            {appMode === 'search' ? (
+              <SearchResultsView 
+                directory={searchDirectory}
+                pattern={searchParams.pattern}
+                caseSensitive={searchParams.caseSensitive}
+                theme={theme}
+              />
+            ) : (isMarkdown || isCsv) && previewMode ? (
               isCsv ? (
                 <CsvEditor
                   content={fileContent}
@@ -734,10 +714,7 @@ function App() {
 
         {showSearch && (
           <SearchPanel
-            results={searchResults}
-            isSearching={isSearching}
             onSearch={handleSearch}
-            onResultClick={openSearchResult}
             onClose={() => setShowSearch(false)}
             initialDirectory={searchDirectory}
             currentPath={filePath}
