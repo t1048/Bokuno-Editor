@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
-  name: 'file' | 'save' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit' | 'plus';
+  name: 'file' | 'save' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit' | 'plus' | 'folder' | 'folder-open' | 'sidebar' | 'chevron-right';
   size?: number | string;
 }
 
@@ -19,6 +19,32 @@ const Icon: React.FC<IconProps> = ({ name, size = 18, ...props }) => {
   } as React.SVGProps<SVGSVGElement>;
 
   switch (name) {
+    case 'folder':
+      return (
+        <svg {...commonProps}>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case 'folder-open':
+      return (
+        <svg {...commonProps}>
+          <path d="M2 10h20" />
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case 'sidebar':
+      return (
+        <svg {...commonProps}>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="9" y1="3" x2="9" y2="21" />
+        </svg>
+      );
+    case 'chevron-right':
+      return (
+        <svg {...commonProps}>
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      );
     case 'plus':
       return (
         <svg {...commonProps}>

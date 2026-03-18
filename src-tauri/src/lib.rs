@@ -44,6 +44,56 @@ pub struct FileContent {
     pub encoding: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FileEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+#[tauri::command]
+async fn read_directory(path: String) -> Result<Vec<FileEntry>, String> {
+    let dir_path = Path::new(&path);
+    if !dir_path.exists() || !dir_path.is_dir() {
+        return Err(format!("Not a valid directory: {}", path));
+    }
+
+    let mut entries = Vec::new();
+    let read_dir = fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    for entry_result in read_dir {
+        if let Ok(entry) = entry_result {
+            let path_buf = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            
+            // Skip hidden files/directories (starting with .) if desired, but let's just return everything or maybe skip .git
+            if name == ".git" {
+                continue;
+            }
+
+            let is_dir = path_buf.is_dir();
+            entries.push(FileEntry {
+                name,
+                path: path_buf.to_string_lossy().to_string(),
+                is_dir,
+            });
+        }
+    }
+
+    // Sort entries: directories first, then alphabetically
+    entries.sort_by(|a, b| {
+        if a.is_dir && !b.is_dir {
+            std::cmp::Ordering::Less
+        } else if !a.is_dir && b.is_dir {
+            std::cmp::Ordering::Greater
+        } else {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        }
+    });
+
+    Ok(entries)
+}
+
 #[tauri::command]
 async fn read_file(request: ReadRequest) -> Result<FileContent, String> {
     let path = Path::new(&request.file_path);
@@ -488,6 +538,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(TailWatcher::default())
         .invoke_handler(tauri::generate_handler![
+            read_directory,
             read_file,
             write_file,
             search_in_directory,

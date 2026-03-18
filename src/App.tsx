@@ -8,6 +8,7 @@ import MarkdownPreview from './components/MarkdownPreview'
 import CsvEditor from './components/CsvEditor'
 import SearchPanel from './components/SearchPanel'
 import SearchResultsView from './components/SearchResultsView'
+import FileTree from './components/FileTree'
 import Icon from './components/Icon'
 import './App.css'
 
@@ -109,10 +110,47 @@ function App() {
   const [searchDirectory, setSearchDirectory] = useState('')
   const [showPathMenu, setShowPathMenu] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
+  const [folderPath, setFolderPath] = useState<string>('')
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(250)
+  const isResizingRef = useRef(false)
   const pathMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
   const isModifiedRef = useRef(isModified)
+
+  // Sidebar resize logic
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.classList.add('is-resizing');
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      
+      const newWidth = e.clientX;
+      if (newWidth >= 150 && newWidth <= 600) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.classList.remove('is-resizing');
+    };
+
+    if (showSidebar) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [showSidebar]);
 
   // MarkdownファイルかどうかをfileNameから判定
   const isMarkdown = isMarkdownFile(fileName)
@@ -203,19 +241,24 @@ function App() {
     }
   }, [])
 
-  // Handle file open
-  const handleOpenFile = useCallback(async () => {
+  // Shared load file function
+  const loadFile = useCallback(async (selectedPath: string) => {
     if (isTailMode) {
       await stopTail()
     }
+    
+    // Check if there are unsaved changes
+    if (isModifiedRef.current) {
+      const confirmed = await ask(
+        '変更が保存されていません。別のファイルを開くと変更が破棄されます。よろしいですか？',
+        { title: 'Bokuno Editor', kind: 'warning', okLabel: 'はい', cancelLabel: 'いいえ' }
+      )
+      if (!confirmed) return
+    }
 
     try {
-      // ファイルダイアログを表示
-      const selected = await open({ multiple: false, directory: false })
-      if (!selected || typeof selected !== 'string') return
-
       setStatusMessage('Loading...')
-      const readRequest: ReadRequest = { file_path: selected, encoding }
+      const readRequest: ReadRequest = { file_path: selectedPath, encoding }
       const result = await invoke<FileContent>('read_file', { 
         request: readRequest 
       })
@@ -229,7 +272,31 @@ function App() {
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
     }
-  }, [isTailMode, stopTail, encoding])
+  }, [encoding, isTailMode, stopTail])
+
+  // Handle file open
+  const handleOpenFile = useCallback(async () => {
+    try {
+      const selected = await open({ multiple: false, directory: false })
+      if (!selected || typeof selected !== 'string') return
+      await loadFile(selected)
+    } catch (error) {
+      setStatusMessage(`Error opening dialog: ${error}`)
+    }
+  }, [loadFile])
+
+  // Handle folder open
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      const selected = await open({ directory: true })
+      if (!selected || typeof selected !== 'string') return
+      setFolderPath(selected)
+      setShowSidebar(true)
+      setStatusMessage(`Opened folder: ${selected}`)
+    } catch (error) {
+      setStatusMessage(`Error opening folder: ${error}`)
+    }
+  }, [])
 
   // Handle file save
   const handleSaveFile = useCallback(async () => {
@@ -492,11 +559,23 @@ function App() {
       <header className="toolbar">
         <div className="toolbar-row toolbar-actions-row">
           <div className="action-group" role="toolbar" aria-label="Editor actions">
+            <button 
+              className={`action-btn ${showSidebar ? 'action-btn--active' : ''}`}
+              onClick={() => setShowSidebar(prev => !prev)} 
+              title="Toggle Sidebar" 
+              aria-label="Toggle Sidebar"
+            >
+              <Icon name="sidebar" />
+            </button>
+            <div className="action-separator" />
             <button className="action-btn" onClick={handleNewWindow} title="New Window (Ctrl+N)" aria-label="New Window">
               <Icon name="plus" />
             </button>
             <button className="action-btn" onClick={handleOpenFile} title="Open File (Ctrl+O)" aria-label="Open File">
               <Icon name="open" />
+            </button>
+            <button className="action-btn" onClick={handleOpenFolder} title="Open Folder" aria-label="Open Folder">
+              <Icon name="folder-open" />
             </button>
             <button
               className="action-btn"
@@ -607,6 +686,21 @@ function App() {
       </header>
 
       <div className="main-content">
+        {showSidebar && (
+          <>
+            <aside className="app-sidebar" style={{ width: sidebarWidth }}>
+              <FileTree 
+                rootPath={folderPath} 
+                onFileSelect={(path) => loadFile(path)}
+                selectedPath={filePath}
+              />
+            </aside>
+            <div 
+              className="sidebar-resizer" 
+              onMouseDown={handleMouseDown}
+            />
+          </>
+        )}
         <section className="workspace-main">
           <div className="editor-frame">
             {appMode === 'search' ? (

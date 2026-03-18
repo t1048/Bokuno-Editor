@@ -424,6 +424,39 @@ html, body, #root {
   position: relative;
 }
 
+.app-sidebar {
+  min-width: 150px;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px var(--color-shadow-soft);
+  flex-shrink: 0;
+}
+
+.sidebar-resizer {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  margin: 0 -11px; /* Gap is 18px, resizer is in middle */
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.sidebar-resizer:hover,
+body.is-resizing .sidebar-resizer {
+  background-color: var(--color-button-bg);
+}
+
+/* Prevent text selection while resizing */
+body.is-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
 .workspace-main {
   flex: 1;
   display: flex;
