@@ -194,6 +194,15 @@ function App() {
     setIsTailMode(false)
   }, [])
 
+  // Handle new window
+  const handleNewWindow = useCallback(async () => {
+    try {
+      await invoke('spawn_new_window')
+    } catch (error) {
+      setStatusMessage(`Error opening new window: ${error}`)
+    }
+  }, [])
+
   // Handle file open
   const handleOpenFile = useCallback(async () => {
     if (isTailMode) {
@@ -426,6 +435,10 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
         switch (e.key.toLowerCase()) {
+          case 'n':
+            e.preventDefault()
+            handleNewWindow()
+            break
           case 'o':
             e.preventDefault()
             handleOpenFile()
@@ -442,7 +455,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleOpenFile, handleSaveFile])
+  }, [handleNewWindow, handleOpenFile, handleSaveFile])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -479,6 +492,9 @@ function App() {
       <header className="toolbar">
         <div className="toolbar-row toolbar-actions-row">
           <div className="action-group" role="toolbar" aria-label="Editor actions">
+            <button className="action-btn" onClick={handleNewWindow} title="New Window (Ctrl+N)" aria-label="New Window">
+              <Icon name="plus" />
+            </button>
             <button className="action-btn" onClick={handleOpenFile} title="Open File (Ctrl+O)" aria-label="Open File">
               <Icon name="open" />
             </button>

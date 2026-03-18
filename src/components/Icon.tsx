@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
-  name: 'file' | 'save' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit';
+  name: 'file' | 'save' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit' | 'plus';
   size?: number | string;
 }
 
@@ -19,6 +19,13 @@ const Icon: React.FC<IconProps> = ({ name, size = 18, ...props }) => {
   } as React.SVGProps<SVGSVGElement>;
 
   switch (name) {
+    case 'plus':
+      return (
+        <svg {...commonProps}>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
     case 'open':
       return (
         <svg {...commonProps}>

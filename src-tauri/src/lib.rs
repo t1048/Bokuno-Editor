@@ -465,6 +465,17 @@ async fn open_file_in_new_window(file_path: String, line: Option<usize>) -> Resu
     Ok(())
 }
 
+#[tauri::command]
+async fn spawn_new_window() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    
+    std::process::Command::new(exe)
+        .spawn()
+        .map_err(|e| format!("Failed to spawn new window: {}", e))?;
+        
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut log_builder = tauri_plugin_log::Builder::new();
@@ -487,6 +498,7 @@ pub fn run() {
             open_in_explorer,
             spawn_search_window,
             open_file_in_new_window,
+            spawn_new_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
