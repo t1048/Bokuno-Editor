@@ -41,6 +41,7 @@ pub struct FileContent {
     pub content: String,
     pub file_name: String,
     pub file_path: String,
+    pub encoding: String,
 }
 
 #[tauri::command]
@@ -58,15 +59,32 @@ async fn read_file(request: ReadRequest) -> Result<FileContent, String> {
     let mut bytes = fs::read(&request.file_path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
     
-    // UTF-8 BOM の除去（存在する場合）
-    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+    // UTF-8 BOM の有無チェックと除去
+    let has_bom = bytes.starts_with(&[0xEF, 0xBB, 0xBF]);
+    if has_bom {
         bytes.drain(0..3);
     }
 
-    // 文字コードのデコード
-    let encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
-    let actual_encoding_name = if encoding_name == "utf-8-bom" { "utf-8" } else { encoding_name };
+    // 文字コードの決定と自動判定
+    let req_encoding = request.encoding.as_deref().unwrap_or("auto");
     
+    let (actual_encoding_name, detected_encoding_label) = if req_encoding == "auto" {
+        if has_bom {
+            ("utf-8", "utf-8-bom".to_string())
+        } else {
+            let mut detector = chardetng::EncodingDetector::new();
+            detector.feed(&bytes, true);
+            let encoding = detector.guess(None, true);
+            let name = encoding.name();
+            // chardetng は shift_jis 等を返すため、そのまま利用
+            (name, name.to_string())
+        }
+    } else if req_encoding == "utf-8-bom" {
+        ("utf-8", "utf-8-bom".to_string())
+    } else {
+        (req_encoding, req_encoding.to_string())
+    };
+
     let encoding = encoding_rs::Encoding::for_label(actual_encoding_name.as_bytes())
         .ok_or_else(|| format!("Unknown encoding: {}", actual_encoding_name))?;
     
@@ -83,6 +101,7 @@ async fn read_file(request: ReadRequest) -> Result<FileContent, String> {
         content,
         file_name,
         file_path: request.file_path,
+        encoding: detected_encoding_label,
     })
 }
 

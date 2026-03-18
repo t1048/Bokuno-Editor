@@ -13,6 +13,7 @@ interface FileContent {
   content: string
   file_name: string
   file_path: string
+  encoding: string
 }
 
 interface SearchResult {
@@ -100,7 +101,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>('light')
   const [isTailMode, setIsTailMode] = useState(false)
   const [fontSize, setFontSize] = useState(14)
-  const [encoding, setEncoding] = useState('utf-8')
+  const [encoding, setEncoding] = useState('auto')
   const [lineEnding, setLineEnding] = useState('CRLF')
   const [searchDirectory, setSearchDirectory] = useState('')
   const [showPathMenu, setShowPathMenu] = useState(false)
@@ -205,6 +206,7 @@ function App() {
       setFileContent(result.content)
       setFileName(result.file_name)
       setFilePath(result.file_path)
+      setEncoding(result.encoding)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
       setStatusMessage(`Opened: ${result.file_name} (${encoding})`)
@@ -284,6 +286,7 @@ function App() {
       setFileContent(result.content)
       setFileName(result.file_name)
       setFilePath(result.file_path)
+      setEncoding(result.encoding)
       setIsModified(false)
       setStatusMessage(`Reopened: ${result.file_name} (${encoding})`)
     } catch (error) {
@@ -327,6 +330,7 @@ function App() {
       setFileContent(result.content)
       setFileName(result.file_name)
       setFilePath(result.file_path)
+      setEncoding(result.encoding)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
       setShowSearch(false)
@@ -361,6 +365,7 @@ function App() {
             request: { file_path: filePath } 
           })
           setFileContent(result.content)
+          setEncoding(result.encoding)
           setStatusMessage(`Tail: ${result.file_name} (rotated)`)
           // Scroll to bottom after React has re-rendered the new content
           setTimeout(() => editorRef.current?.scrollToBottom(), 0)
@@ -415,6 +420,7 @@ function App() {
           setFileContent(result.content)
           setFileName(result.file_name)
           setFilePath(result.file_path)
+          setEncoding(result.encoding)
           setIsModified(false)
           setSearchDirectory(getDirectoryFromPath(result.file_path))
           setStatusMessage(`Opened: ${result.file_name}`)
@@ -674,6 +680,7 @@ function App() {
                   value={encoding}
                   onChange={(e) => setEncoding(e.target.value)}
                 >
+                  <option value="auto">Auto (自動判定)</option>
                   <option value="utf-8">UTF-8</option>
                   <option value="shift-jis">Shift-JIS</option>
                   <option value="utf-8-bom">UTF-8 (BOMあり)</option>
