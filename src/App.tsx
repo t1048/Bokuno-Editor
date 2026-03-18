@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import Editor, { type EditorRef } from './components/Editor'
 import MarkdownPreview from './components/MarkdownPreview'
+import CsvEditor from './components/CsvEditor'
 import SearchPanel from './components/SearchPanel'
 import Icon from './components/Icon'
 import './App.css'
@@ -45,6 +46,10 @@ type Theme = 'light' | 'dark'
 const isMarkdownFile = (name: string): boolean => {
   const ext = name.split('.').pop()?.toLowerCase()
   return ext === 'md' || ext === 'markdown'
+}
+
+const isCsvFile = (name: string): boolean => {
+  return name.split('.').pop()?.toLowerCase() === 'csv'
 }
 
 const shortenPath = (fullPath: string) => {
@@ -113,13 +118,17 @@ function App() {
 
   // MarkdownファイルかどうかをfileNameから判定
   const isMarkdown = isMarkdownFile(fileName)
+  const isCsv = isCsvFile(fileName)
 
-  // 非Markdownファイルを開いたらpreviewModeをリセット
+  // 非Markdown/CSVファイルを開いたらpreviewModeをリセット
+  // CSVファイルの場合はデフォルトでプレビュー(グリッド)モードにする
   useEffect(() => {
-    if (!isMarkdown) {
+    if (!isMarkdown && !isCsv) {
       setPreviewMode(false)
+    } else if (isCsv) {
+      setPreviewMode(true)
     }
-  }, [isMarkdown])
+  }, [isMarkdown, isCsv])
 
   // Sync isModifiedRef with isModified state for use in event listeners
   useEffect(() => {
@@ -530,7 +539,7 @@ function App() {
               <Icon name="search" />
             </button>
 
-            {isMarkdown && (
+            { (isMarkdown || isCsv) && (
               <>
                 <div className="action-separator" />
                 <button
@@ -611,11 +620,19 @@ function App() {
       <div className="main-content">
         <section className="workspace-main">
           <div className="editor-frame">
-            {isMarkdown && previewMode ? (
-              <MarkdownPreview
-                content={fileContent}
-                theme={theme}
-              />
+            {(isMarkdown || isCsv) && previewMode ? (
+              isCsv ? (
+                <CsvEditor
+                  content={fileContent}
+                  theme={theme}
+                  onChange={handleContentChange}
+                />
+              ) : (
+                <MarkdownPreview
+                  content={fileContent}
+                  theme={theme}
+                />
+              )
             ) : (
               <Editor
                 ref={editorRef}
@@ -735,7 +752,7 @@ function App() {
         </div>
 
         <div className="status-secondary">
-          <span className="status-pill">{isTailMode ? 'Read only' : (isMarkdown && previewMode ? 'Preview' : 'Editable')}</span>
+          <span className="status-pill">{isTailMode ? 'Read only' : ((isMarkdown || isCsv) && previewMode ? 'Preview' : 'Editable')}</span>
           <span 
             className="status-pill clickable" 
             onClick={handleReopenWithEncoding}
