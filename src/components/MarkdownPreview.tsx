@@ -1,10 +1,12 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react'
 import { marked } from 'marked'
 import mermaid from 'mermaid'
+import { invoke } from '@tauri-apps/api/core'
 import './MarkdownPreview.css'
 
 interface MarkdownPreviewProps {
   content: string
+  filePath?: string
   theme: 'light' | 'dark'
 }
 
@@ -19,7 +21,6 @@ const initMermaid = (theme: 'light' | 'dark') => {
   mermaidInitialized = true
 }
 
-// Mermaidコードブロックをプレースホルダに変換してから marked に渡す
 const extractMermaidBlocks = (markdown: string): { processed: string; blocks: string[] } => {
   const blocks: string[] = []
   const processed = markdown.replace(/```mermaid\r?\n([\s\S]*?)```/g, (_, code) => {
@@ -30,25 +31,52 @@ const extractMermaidBlocks = (markdown: string): { processed: string; blocks: st
   return { processed, blocks }
 }
 
-const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, theme }) => {
+const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, theme }) => {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [streamedContent, setStreamedContent] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(false)
+  const offsetRef = useRef(0)
+  const totalSizeRef = useRef(0)
 
-  // Mermaidブロックを抽出してHTMLを生成
+  const effectiveContent = content || streamedContent
+
+  const loadStreaming = useCallback(async (path: string) => {
+    setIsLoading(true)
+    try {
+      const CHUNK_SIZE = 1024 * 512; // 512KB
+      const chunk = await invoke<any>('read_file_chunk', {
+        request: { file_path: path, start: 0, length: CHUNK_SIZE }
+      })
+      setStreamedContent(chunk.content)
+      offsetRef.current = chunk.start + chunk.length
+      totalSizeRef.current = chunk.total_size
+    } catch (e) {
+      console.error('Markdown streaming error:', e)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (filePath && content === '') {
+      loadStreaming(filePath)
+    } else {
+      setStreamedContent('')
+    }
+  }, [content, filePath, loadStreaming])
+
   const { html, mermaidBlocks } = useMemo(() => {
-    const { processed, blocks } = extractMermaidBlocks(content)
+    const { processed, blocks } = extractMermaidBlocks(effectiveContent)
     const rawHtml = marked.parse(processed, { async: false }) as string
     return { html: rawHtml, mermaidBlocks: blocks }
-  }, [content])
+  }, [effectiveContent])
 
-  // DOMを更新してMermaidを描画
   useEffect(() => {
     if (!containerRef.current) return
 
-    // Mermaid初期化（初回のみ）
     if (!mermaidInitialized) {
       initMermaid(theme)
     } else {
-      // テーマ変更時は再初期化
       mermaid.initialize({
         startOnLoad: false,
         theme: theme === 'dark' ? 'dark' : 'default',
@@ -56,7 +84,6 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, theme }) => 
       })
     }
 
-    // プレースホルダをMermaid SVGに置き換える
     const renderMermaid = async () => {
       const placeholders = containerRef.current?.querySelectorAll('.mermaid-placeholder')
       if (!placeholders) return
@@ -92,6 +119,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, theme }) => 
         className="markdown-body"
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      {isLoading && <div className="markdown-loading">読み込み中...</div>}
     </div>
   )
 }

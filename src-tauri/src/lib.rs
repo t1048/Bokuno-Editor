@@ -2,6 +2,7 @@ use ignore::WalkBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Seek, SeekFrom, BufReader};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -26,6 +27,23 @@ pub struct SearchRequest {
 pub struct ReadRequest {
     pub file_path: String,
     pub encoding: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ReadChunkRequest {
+    pub file_path: String,
+    pub start: u64,
+    pub length: u64,
+    pub encoding: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FileChunk {
+    pub content: String,
+    pub start: u64,
+    pub length: u64,
+    pub total_size: u64,
+    pub encoding: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -196,6 +214,146 @@ async fn write_file(request: WriteRequest) -> Result<(), String> {
     Ok(())
 }
 
+fn adjust_to_utf8_boundary<R: Read + Seek>(reader: &mut R, pos: u64) -> u64 {
+    if pos == 0 {
+        return 0;
+    }
+
+    let mut current_pos = pos;
+    let mut buffer = [0u8; 1];
+
+    // Check up to 3 bytes back to find the start of a UTF-8 character
+    // UTF-8 start byte: NOT 10xxxxxx (0x80 to 0xBF)
+    for _ in 0..4 {
+        if let Ok(_) = reader.seek(SeekFrom::Start(current_pos)) {
+            if let Ok(n) = reader.read(&mut buffer) {
+                if n == 1 {
+                    if (buffer[0] & 0xC0) != 0x80 {
+                        return current_pos;
+                    }
+                }
+            }
+        }
+        if current_pos == 0 {
+            break;
+        }
+        current_pos -= 1;
+    }
+    pos
+}
+
+#[tauri::command]
+async fn read_file_chunk(request: ReadChunkRequest) -> Result<FileChunk, String> {
+    let path = Path::new(&request.file_path);
+    let mut file = fs::File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
+    let total_size = file.metadata().map_err(|e| format!("Failed to get metadata: {}", e))?.len();
+
+    let mut start = request.start;
+    if start > total_size {
+        start = total_size;
+    }
+
+    let mut length = request.length;
+    
+    // Adjust start to UTF-8 boundary if requested or if using UTF-8
+    let req_encoding = request.encoding.as_deref().unwrap_or("auto");
+    let is_utf8 = req_encoding == "auto" || req_encoding == "utf-8" || req_encoding == "utf-8-bom";
+
+    if is_utf8 && start > 0 {
+        start = adjust_to_utf8_boundary(&mut file, start);
+    }
+
+    if start + length > total_size {
+        length = total_size - start;
+    }
+
+    file.seek(SeekFrom::Start(start)).map_err(|e| format!("Failed to seek: {}", e))?;
+    let mut buffer = vec![0u8; length as usize];
+    file.read_exact(&mut buffer).map_err(|e| format!("Failed to read: {}", e))?;
+
+    let (actual_encoding_name, detected_encoding_label) = if req_encoding == "auto" {
+        // Detect encoding based on first 8KB if start is 0, or just use utf-8
+        if start == 0 {
+            let mut detector = chardetng::EncodingDetector::new();
+            detector.feed(&buffer, true);
+            let enc = detector.guess(None, true);
+            (enc.name(), enc.name().to_string())
+        } else {
+            ("utf-8", "utf-8".to_string())
+        }
+    } else {
+        (req_encoding, req_encoding.to_string())
+    };
+
+    let encoding = encoding_rs::Encoding::for_label(actual_encoding_name.as_bytes())
+        .ok_or_else(|| format!("Unknown encoding: {}", actual_encoding_name))?;
+
+    let (content, _actual_encoding, _has_malformed) = encoding.decode(&buffer);
+    
+    Ok(FileChunk {
+        content: content.into_owned(),
+        start,
+        length: buffer.len() as u64,
+        total_size,
+        encoding: detected_encoding_label,
+    })
+}
+
+#[tauri::command]
+async fn get_file_metadata(file_path: String) -> Result<serde_json::Value, String> {
+    let path = Path::new(&file_path);
+    if !path.is_file() {
+        return Err(format!("Not a file: {}", file_path));
+    }
+    
+    let metadata = fs::metadata(path).map_err(|e| format!("Failed to get metadata: {}", e))?;
+    let size = metadata.len();
+
+    let mut file = fs::File::open(path).map_err(|e| format!("Failed to open: {}", e))?;
+    
+    // Encoding detection
+    let mut head = vec![0u8; std::cmp::min(size as usize, 8192)];
+    let _ = file.read_exact(&mut head); // Ignore error for small files
+    
+    let has_bom = head.starts_with(&[0xEF, 0xBB, 0xBF]);
+    let encoding_name = if has_bom {
+        "utf-8-bom".to_string()
+    } else {
+        let mut detector = chardetng::EncodingDetector::new();
+        detector.feed(&head, true);
+        let encoding = detector.guess(None, true);
+        encoding.name().to_string()
+    };
+
+    // Approximate line count
+    let mut line_count = 0;
+    // Fast scan for '\n'
+    if size < 1024 * 1024 * 1024 { // < 1GB
+        file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(file);
+        let mut buffer = [0u8; 65536];
+        loop {
+            let n = reader.read(&mut buffer).map_err(|e| e.to_string())?;
+            if n == 0 { break; }
+            line_count += buffer[..n].iter().filter(|&&b| b == b'\n').count() as u64;
+        }
+    } else {
+        // Extrapolate from first 10MB
+        file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let mut head_10mb = vec![0u8; 10 * 1024 * 1024];
+        let n = file.read(&mut head_10mb).map_err(|e| e.to_string())?;
+        let head_lines = head_10mb[..n].iter().filter(|&&b| b == b'\n').count() as u64;
+        line_count = (head_lines as f64 * (size as f64 / n as f64)) as u64;
+    }
+
+    Ok(serde_json::json!({
+        "file_path": file_path,
+        "size": size,
+        "encoding": encoding_name,
+        "line_count_approx": line_count,
+    }))
+}
+
 #[tauri::command]
 async fn search_in_directory(request: SearchRequest) -> Result<Vec<SearchResult>, String> {
     let regex_flags = if request.case_sensitive { "" } else { "(?i)" };
@@ -233,13 +391,20 @@ async fn search_in_directory(request: SearchRequest) -> Result<Vec<SearchResult>
             continue;
         }
         
-        let content = match fs::read_to_string(path) {
-            Ok(c) => c,
+        let file = match fs::File::open(path) {
+            Ok(f) => f,
             Err(_) => continue,
         };
+        let reader = BufReader::new(file);
+        use std::io::BufRead;
         
-        for (line_number, line) in content.lines().enumerate() {
-            if let Some(mat) = regex.find(line) {
+        for (line_number, line_result) in reader.lines().enumerate() {
+            let line = match line_result {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+            
+            if let Some(mat) = regex.find(&line) {
                 results.push(SearchResult {
                     file_path: file_path_str.clone(),
                     line_number: line_number + 1,
@@ -247,9 +412,12 @@ async fn search_in_directory(request: SearchRequest) -> Result<Vec<SearchResult>
                     matched_range: (mat.start(), mat.end()),
                 });
             }
+            
+            if results.len() >= 10000 {
+                break;
+            }
         }
         
-        // Limit results to prevent memory issues
         if results.len() >= 10000 {
             break;
         }
@@ -550,9 +718,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_directory,
             read_file,
+            read_file_chunk,
             write_file,
             search_in_directory,
             get_file_info,
+            get_file_metadata,
             get_cli_args,
             start_tail,
             stop_tail,

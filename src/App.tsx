@@ -258,6 +258,21 @@ function App() {
     }
 
     try {
+      setStatusMessage('Checking file...')
+      const metadata = await invoke<any>('get_file_metadata', { filePath: selectedPath });
+      const isLargeFile = metadata.size > 1024 * 1024 * 5; // 5MB threshold
+
+      if (isLargeFile) {
+          setFileContent(''); // Clear content for streaming
+          setFileName(getFileNameFromPath(selectedPath));
+          setFilePath(selectedPath);
+          setEncoding(metadata.encoding);
+          setIsModified(false);
+          setSearchDirectory(getDirectoryFromPath(selectedPath));
+          setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
+          return;
+      }
+
       setStatusMessage('Loading...')
       const readRequest: ReadRequest = { file_path: selectedPath, encoding }
       const result = await invoke<FileContent>('read_file', { 
@@ -269,7 +284,7 @@ function App() {
       setEncoding(result.encoding)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
-      setStatusMessage(`Opened: ${result.file_name} (${encoding})`)
+      setStatusMessage(`Opened: ${result.file_name} (${result.encoding})`)
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
     }
@@ -722,12 +737,14 @@ function App() {
               isCsv ? (
                 <CsvEditor
                   content={fileContent}
+                  filePath={filePath}
                   theme={theme}
                   onChange={handleContentChange}
                 />
               ) : (
                 <MarkdownPreview
                   content={fileContent}
+                  filePath={filePath}
                   theme={theme}
                 />
               )
@@ -735,6 +752,7 @@ function App() {
               <Editor
                 ref={editorRef}
                 initialContent={fileContent}
+                filePath={filePath}
                 fileName={fileName}
                 theme={theme}
                 readOnly={isTailMode}

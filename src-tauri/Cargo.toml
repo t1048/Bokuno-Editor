@@ -1,10 +1,10 @@
 [package]
 name = "Bokuno-Editor"
-version = "0.1.0"
-description = "A Tauri App"
+version = "0.1.1"
+description = "A Text Editor"
 authors = ["t1048"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/t1048/Bokuno-Editor.git"
 edition = "2021"
 rust-version = "1.77.2"
 

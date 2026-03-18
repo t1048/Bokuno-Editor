@@ -1,63 +1,31 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
+// @ts-ignore
+import * as ReactWindowModule from 'react-window';
+// @ts-ignore
+import * as AutoSizerModule from 'react-virtualized-auto-sizer';
+import Papa from 'papaparse';
+import { invoke } from '@tauri-apps/api/core';
 import './CsvEditor.css';
 
-function parseCsv(csv: string): string[][] {
-  const result: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let inQuotes = false;
+// Workaround for import issues in some environments (Vite/Rolldown CJS interop)
+const RW: any = (ReactWindowModule as any).default || ReactWindowModule;
+const FixedSizeGrid = RW.FixedSizeGrid;
+const FixedSizeList = RW.FixedSizeList;
 
-  for (let i = 0; i < csv.length; i++) {
-    const char = csv[i];
-    const nextChar = csv[i + 1];
+const AS: any = (AutoSizerModule as any).default || AutoSizerModule;
+const AutoSizer = AS;
 
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        cell += '"';
-        i++; // skip next quote
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      row.push(cell);
-      cell = '';
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        i++; // skip LF
-      }
-      row.push(cell);
-      result.push(row);
-      row = [];
-      cell = '';
-    } else {
-      cell += char;
-    }
-  }
-
-  row.push(cell);
-  if (row.length > 0 || result.length > 0) {
-    result.push(row);
-  }
-  
-  // ensure all rows have same number of columns
-  const maxCols = Math.max(1, ...result.map(r => r.length));
-  return result.map(r => {
-    while (r.length < maxCols) r.push('');
-    return r;
-  });
+interface CsvEditorProps {
+  content: string;
+  filePath?: string;
+  theme: 'light' | 'dark';
+  onChange: (content: string) => void;
 }
 
-function stringifyCsv(data: string[][]): string {
-  if (data.length === 0) return '';
-  return data.map(row => 
-    row.map(cell => {
-      if (cell.includes(',') || cell.includes('"') || cell.includes('\n') || cell.includes('\r')) {
-        return `"${cell.replace(/"/g, '""')}"`;
-      }
-      return cell;
-    }).join(',')
-  ).join('\n');
-}
+const ROW_HEIGHT = 32;
+const COL_WIDTH = 150;
+const HEADER_WIDTH = 50;
+const HEADER_HEIGHT = 32;
 
 function getColumnName(index: number) {
   let name = '';
@@ -69,138 +37,254 @@ function getColumnName(index: number) {
   return name;
 }
 
-interface CsvEditorProps {
-  content: string;
-  theme: 'light' | 'dark';
-  onChange: (content: string) => void;
+interface CellProps {
+  columnIndex: number;
+  rowIndex: number;
+  style: React.CSSProperties;
+  data: {
+    data: string[][];
+    onCellChange: (r: number, c: number, v: string) => void;
+  };
 }
 
-export default function CsvEditor({ content, theme, onChange }: CsvEditorProps) {
+const Cell = memo(({ columnIndex, rowIndex, style, data }: CellProps) => {
+  const value = data.data[rowIndex]?.[columnIndex] || '';
+  
+  return (
+    <div className="csv-cell" style={style}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => data.onCellChange(rowIndex, columnIndex, e.target.value)}
+        className="csv-input"
+      />
+    </div>
+  );
+});
+
+export default function CsvEditor({ content, filePath, theme, onChange }: CsvEditorProps) {
   const [data, setData] = useState<string[][]>([['']]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const isInternalChange = useRef(false);
+  const gridRef = useRef<any>(null);
+  const headerRef = useRef<any>(null);
+  const sideRef = useRef<any>(null);
+  const canUseLegacyVirtualGrid = Boolean(FixedSizeGrid && FixedSizeList && AutoSizer);
+
+  // Sync scrolling
+  const onScroll = useCallback(({ scrollLeft, scrollTop }: { scrollLeft: number; scrollTop: number }) => {
+    headerRef.current?.scrollTo(scrollLeft);
+    sideRef.current?.scrollTo(scrollTop);
+  }, []);
+
+  const loadStreaming = useCallback(async (path: string) => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      // metadata is fetched to ensure the file exists and get basic info
+      await invoke<any>('get_file_metadata', { filePath: path });
+      const CHUNK_SIZE = 1024 * 512; // 512KB for first fast display
+      
+      const firstChunk = await invoke<any>('read_file_chunk', { 
+        request: { file_path: path, start: 0, length: CHUNK_SIZE } 
+      });
+      
+      const result = Papa.parse<string[]>(firstChunk.content, { skipEmptyLines: false });
+      if (result.data.length > 0) {
+        setData(result.data);
+      }
+    } catch (e) {
+      console.error('Streaming load error:', e);
+      setLoadError('CSVの読み込みに失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isInternalChange.current) {
       isInternalChange.current = false;
       return;
     }
-    setData(parseCsv(content));
-  }, [content]);
 
-  const updateData = useCallback((newData: string[][]) => {
-    isInternalChange.current = true;
-    setData(newData);
-    onChange(stringifyCsv(newData));
+    if (filePath && content === '') {
+      loadStreaming(filePath);
+    } else {
+      setLoadError(null);
+      try {
+        const result = Papa.parse<string[]>(content, { skipEmptyLines: false });
+        if (result.data.length > 0) {
+          setData(result.data);
+        }
+      } catch (e) {
+        console.error('CSV parse error:', e);
+        setLoadError('CSVの解析に失敗しました。');
+      }
+    }
+  }, [content, filePath, loadStreaming]);
+
+  const handleCellChange = useCallback((rIndex: number, cIndex: number, value: string) => {
+    setData(prev => {
+        const newData = [...prev];
+        if (!newData[rIndex]) newData[rIndex] = [];
+        newData[rIndex] = [...newData[rIndex]];
+        newData[rIndex][cIndex] = value;
+        
+        // Schedule onChange
+        const csv = Papa.unparse(newData);
+        isInternalChange.current = true;
+        onChange(csv);
+        
+        return newData;
+    });
   }, [onChange]);
 
-  const handleCellChange = (rIndex: number, cIndex: number, value: string) => {
-    const newData = [...data];
-    newData[rIndex] = [...newData[rIndex]];
-    newData[rIndex][cIndex] = value;
-    updateData(newData);
-  };
+  const rowCount = data.length;
+  const colCount = data[0]?.length || 0;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rIndex: number, cIndex: number) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const target = e.target as HTMLInputElement;
-      const start = target.selectionStart || 0;
-      const end = target.selectionEnd || 0;
-      const value = target.value;
-      const newValue = value.substring(0, start) + '\t' + value.substring(end);
-      
-      handleCellChange(rIndex, cIndex, newValue);
-
-      // Restore cursor position asynchronously after render
-      requestAnimationFrame(() => {
-        target.selectionStart = target.selectionEnd = start + 1;
-      });
-    }
-  };
-
-  const addRow = (index: number) => {
-    const newData = [...data];
-    const colCount = newData[0]?.length || 1;
-    newData.splice(index, 0, Array(colCount).fill(''));
-    updateData(newData);
-  };
-
-  const removeRow = (index: number) => {
-    if (data.length <= 1) return;
-    const newData = [...data];
-    newData.splice(index, 1);
-    updateData(newData);
-  };
-
-  const addColumn = (index: number) => {
-    const newData = data.map(row => {
-      const newRow = [...row];
-      newRow.splice(index, 0, '');
-      return newRow;
-    });
-    updateData(newData);
-  };
-
-  const removeColumn = (index: number) => {
-    if (data[0]?.length <= 1) return;
-    const newData = data.map(row => {
-      const newRow = [...row];
-      newRow.splice(index, 1);
-      return newRow;
-    });
-    updateData(newData);
-  };
-
-  return (
-    <div className={`csv-editor csv-theme-${theme}`}>
-      <div className="csv-table-container">
-        <table className="csv-table">
-          <thead>
-            <tr>
-              <th className="csv-cell-header csv-corner"></th>
-              {data[0]?.map((_, cIndex) => (
-                <th key={cIndex} className="csv-cell-header csv-col-header">
-                  <div className="csv-header-content">
-                    <span className="csv-header-title">{getColumnName(cIndex)}</span>
-                    <div className="csv-header-actions">
-                      <button onClick={() => addColumn(cIndex)} title="前に列を追加" aria-label="Add column before">+</button>
-                      <button onClick={() => removeColumn(cIndex)} title="列を削除" aria-label="Remove column" disabled={data[0]?.length <= 1}>-</button>
-                      <button onClick={() => addColumn(cIndex + 1)} title="後に列を追加" aria-label="Add column after">+</button>
-                    </div>
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, rIndex) => (
-              <tr key={rIndex}>
-                <th className="csv-cell-header csv-row-header">
-                  <div className="csv-header-content">
-                    <span className="csv-header-title">{rIndex + 1}</span>
-                    <div className="csv-header-actions csv-header-actions-vertical">
-                      <button onClick={() => addRow(rIndex)} title="上に行を追加" aria-label="Add row above">+</button>
-                      <button onClick={() => removeRow(rIndex)} title="行を削除" aria-label="Remove row" disabled={data.length <= 1}>-</button>
-                      <button onClick={() => addRow(rIndex + 1)} title="下に行を追加" aria-label="Add row below">+</button>
-                    </div>
-                  </div>
-                </th>
-                {row.map((cell, cIndex) => (
-                  <td key={cIndex} className="csv-cell">
-                    <input
-                      type="text"
-                      value={cell}
-                      onChange={(e) => handleCellChange(rIndex, cIndex, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, rIndex, cIndex)}
-                      className="csv-input"
-                    />
-                  </td>
+  if (!canUseLegacyVirtualGrid) {
+    return (
+      <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`}>
+        {loadError && <div className="csv-error-banner">{loadError}</div>}
+        <div className="csv-fallback-container">
+          <table className="csv-fallback-table">
+            <thead>
+              <tr>
+                <th className="csv-fallback-index">#</th>
+                {Array.from({ length: colCount }).map((_, index) => (
+                  <th key={index}>{getColumnName(index)}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  <td className="csv-fallback-index">{rowIndex + 1}</td>
+                  {Array.from({ length: colCount }).map((_, colIndex) => (
+                    <td key={colIndex}>
+                      <input
+                        type="text"
+                        value={row[colIndex] || ''}
+                        onChange={(e) => handleCellChange(rowIndex, colIndex, e.target.value)}
+                        className="csv-input"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {isLoading && <div className="csv-loading-overlay">読み込み中...</div>}
       </div>
+    );
+  }
+
+  return (
+    <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`}>
+      {loadError && <div className="csv-error-banner">{loadError}</div>}
+      <div className="csv-virtual-container">
+        <AutoSizer>
+          {({ height, width }: any) => (
+            <div style={{ position: 'relative', width, height }}>
+              {/* Corner */}
+              <div 
+                className="csv-cell-header csv-corner" 
+                style={{ 
+                    position: 'absolute', 
+                    top: 0, 
+                    left: 0, 
+                    width: HEADER_WIDTH, 
+                    height: HEADER_HEIGHT,
+                    zIndex: 30
+                }} 
+              />
+              
+              {/* Column Headers (Horizontal List) */}
+              <div style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: HEADER_WIDTH, 
+                  width: width - HEADER_WIDTH, 
+                  height: HEADER_HEIGHT,
+                  overflow: 'hidden',
+                  zIndex: 20
+              }}>
+                <FixedSizeList
+                  ref={headerRef}
+                  height={HEADER_HEIGHT}
+                  itemCount={colCount}
+                  itemSize={COL_WIDTH}
+                  layout="horizontal"
+                  width={width - HEADER_WIDTH}
+                  style={{ overflow: 'hidden' }}
+                >
+                  {({ index, style }: any) => (
+                    <div className="csv-cell-header csv-col-header" style={style}>
+                      <div className="csv-header-content">
+                        <span className="csv-header-title">{getColumnName(index)}</span>
+                      </div>
+                    </div>
+                  )}
+                </FixedSizeList>
+              </div>
+
+              {/* Row Headers (Vertical List) */}
+              <div style={{ 
+                  position: 'absolute', 
+                  top: HEADER_HEIGHT, 
+                  left: 0, 
+                  width: HEADER_WIDTH, 
+                  height: height - HEADER_HEIGHT,
+                  overflow: 'hidden',
+                  zIndex: 20
+              }}>
+                <FixedSizeList
+                  ref={sideRef}
+                  height={height - HEADER_HEIGHT}
+                  itemCount={rowCount}
+                  itemSize={ROW_HEIGHT}
+                  width={HEADER_WIDTH}
+                  style={{ overflow: 'hidden' }}
+                >
+                  {({ index, style }: any) => (
+                    <div className="csv-cell-header csv-row-header" style={style}>
+                      <div className="csv-header-content">
+                        <span className="csv-header-title">{index + 1}</span>
+                      </div>
+                    </div>
+                  )}
+                </FixedSizeList>
+              </div>
+
+              {/* Main Grid */}
+              <div style={{ 
+                  position: 'absolute', 
+                  top: HEADER_HEIGHT, 
+                  left: HEADER_WIDTH, 
+                  width: width - HEADER_WIDTH, 
+                  height: height - HEADER_HEIGHT 
+              }}>
+                <FixedSizeGrid
+                  ref={gridRef}
+                  columnCount={colCount}
+                  columnWidth={COL_WIDTH}
+                  height={height - HEADER_HEIGHT}
+                  rowCount={rowCount}
+                  rowHeight={ROW_HEIGHT}
+                  width={width - HEADER_WIDTH}
+                  onScroll={onScroll}
+                  itemData={{ data, onCellChange: handleCellChange }}
+                >
+                  {Cell}
+                </FixedSizeGrid>
+              </div>
+            </div>
+          )}
+        </AutoSizer>
+      </div>
+      {isLoading && <div className="csv-loading-overlay">読み込み中...</div>}
     </div>
   );
 }
