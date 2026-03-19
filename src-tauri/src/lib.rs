@@ -194,7 +194,10 @@ async fn write_file(request: WriteRequest) -> Result<(), String> {
     }
 
     // 文字コードのエンコード
-    let encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
+    let mut encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
+    if encoding_name == "auto" {
+        encoding_name = "utf-8";
+    }
     let is_bom = encoding_name == "utf-8-bom";
     let actual_encoding_name = if is_bom { "utf-8" } else { encoding_name };
 
@@ -704,6 +707,21 @@ async fn spawn_new_window() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn create_directory(path: String) -> Result<(), String> {
+    fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {}", e))
+}
+
+#[tauri::command]
+async fn remove_file(path: String) -> Result<(), String> {
+    fs::remove_file(&path).map_err(|e| format!("Failed to remove file: {}", e))
+}
+
+#[tauri::command]
+async fn remove_directory(path: String) -> Result<(), String> {
+    fs::remove_dir_all(&path).map_err(|e| format!("Failed to remove directory: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut log_builder = tauri_plugin_log::Builder::new();
@@ -730,6 +748,9 @@ pub fn run() {
             spawn_search_window,
             open_file_in_new_window,
             spawn_new_window,
+            create_directory,
+            remove_file,
+            remove_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

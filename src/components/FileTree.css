@@ -20,6 +20,29 @@
   color: var(--color-muted-text);
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-tree-header-action {
+  background: none;
+  border: none;
+  color: var(--color-muted-text);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.file-tree-header-action:hover {
+  background-color: var(--color-hover-bg);
+  opacity: 1;
+  color: var(--color-text);
 }
 
 .file-tree-title {
@@ -85,6 +108,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.tree-node-action {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-muted-text);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-node:hover .tree-node-action {
+  display: flex;
+}
+
+.tree-node-action:hover {
+  background-color: var(--color-hover-bg);
+  color: var(--color-text);
+}
+
+.tree-node-action--danger:hover {
+  background-color: var(--color-danger-hover);
+  color: var(--color-surface);
+}
+
+.tree-node-actions-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.file-tree-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .tree-children {

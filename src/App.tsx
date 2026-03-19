@@ -332,10 +332,12 @@ function App() {
         targetName = getFileNameFromPath(selected)
       }
 
+      const saveEncoding = encoding === 'auto' ? 'utf-8' : encoding;
+
       const writeRequest: WriteRequest = { 
         file_path: targetPath, 
         content: fileContent,
-        encoding,
+        encoding: saveEncoding,
         line_ending: lineEnding
       }
       await invoke('write_file', { 
@@ -345,7 +347,10 @@ function App() {
       setFileName(targetName)
       setSearchDirectory(getDirectoryFromPath(targetPath))
       setIsModified(false)
-      setStatusMessage(`Saved: ${targetName} (${encoding}, ${lineEnding})`)
+      if (encoding === 'auto') {
+        setEncoding('utf-8')
+      }
+      setStatusMessage(`Saved: ${targetName} (${saveEncoding}, ${lineEnding})`)
     } catch (error) {
       setStatusMessage(`Error saving: ${error}`)
     }
@@ -575,6 +580,16 @@ function App() {
     }
   }, [filePath])
 
+  const handleFileDeleted = useCallback((deletedPath: string) => {
+    if (filePath === deletedPath) {
+      setFileContent('')
+      setFileName('')
+      setFilePath('')
+      setIsModified(false)
+      setStatusMessage('File deleted')
+    }
+  }, [filePath])
+
   const statusTone = statusMessage.toLowerCase().includes('error') ? 'error' : 'ready'
 
   return (
@@ -716,6 +731,7 @@ function App() {
                 rootPath={folderPath} 
                 onFileSelect={(path) => loadFile(path)}
                 selectedPath={filePath}
+                onFileDeleted={handleFileDeleted}
               />
             </aside>
             <div 
