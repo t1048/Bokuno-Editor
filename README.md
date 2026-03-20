@@ -43,7 +43,17 @@ npm run tauri build
 - **Ctrl + F**: 検索パネル（Grep）の表示
 - **マウスホイール + Ctrl**: フォントサイズの変更
 - フォルダをワークスペースとして開く: メニューまたはコマンドでフォルダをワークスペースとして開き、プロジェクト単位でファイルツリーや検索を管理できます。
-  
+
+---
+
+## ☕ サポート
+このゲームが気に入っていただけたら、ぜひサポートをお願いします！  
+いただいたご支援は、制作者の糧となり活力になります。
+
+
+[![Support on Ko-fi](https://img.shields.io/badge/Support%20on%20Ko--fi-FF5E5B?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/t1048)
+
+---
 
 ## ライセンス
 
