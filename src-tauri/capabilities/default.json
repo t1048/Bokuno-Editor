@@ -11,6 +11,9 @@
     "core:window:allow-close",
     "dialog:default",
     "dialog:allow-ask",
-    "opener:allow-open-url"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://**" }, { "url": "https://**" }]
+    }
   ]
 }

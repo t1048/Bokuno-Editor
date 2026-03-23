@@ -135,7 +135,11 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
       e.stopPropagation()
 
       if (e.ctrlKey || e.metaKey) {
-        openUrl(href).catch((err) => console.error('Failed to open URL:', err))
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+          openUrl(href).catch((err) => console.error('Failed to open URL:', err))
+        } else {
+          console.log('Ignored non-http/https URL for browser opening:', href)
+        }
       }
     }
 
