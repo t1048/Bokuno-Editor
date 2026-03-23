@@ -52,6 +52,17 @@
   margin-bottom: 1em;
 }
 
+/* 斜体 */
+.markdown-body em {
+  font-style: italic;
+}
+
+/* 取り消し線 */
+.markdown-body del {
+  text-decoration: line-through;
+  color: var(--color-muted-text);
+}
+
 /* リスト */
 .markdown-body ul,
 .markdown-body ol {
