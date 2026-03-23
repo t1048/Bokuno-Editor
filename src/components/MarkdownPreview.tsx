@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo, useState, useCallback } from 'react'
 import { marked } from 'marked'
 import mermaid from 'mermaid'
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import './MarkdownPreview.css'
 
 interface MarkdownPreviewProps {
@@ -111,6 +112,42 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
 
     renderMermaid()
   }, [html, mermaidBlocks, theme])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    // Add Ctrl+Click hint to all links
+    const links = container.querySelectorAll('a[href]')
+    links.forEach((link) => {
+      if (!link.getAttribute('title')) {
+        link.setAttribute('title', 'Ctrl+クリックでブラウザで開く')
+      }
+    })
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a')
+      if (!target) return
+      const href = target.getAttribute('href')
+      if (!href) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      if (e.ctrlKey || e.metaKey) {
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+          openUrl(href).catch((err) => console.error('Failed to open URL:', err))
+        } else {
+          console.log('Ignored non-http/https URL for browser opening:', href)
+        }
+      }
+    }
+
+    container.addEventListener('click', handleLinkClick)
+    return () => {
+      container.removeEventListener('click', handleLinkClick)
+    }
+  }, [html])
 
   return (
     <div className={`markdown-preview ${theme === 'dark' ? 'markdown-preview--dark' : ''}`}>

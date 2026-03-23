@@ -2,6 +2,7 @@ import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Compartment, Annotation } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { findNext, findPrevious } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
@@ -9,10 +10,95 @@ import { rust } from '@codemirror/lang-rust'
 import { python } from '@codemirror/lang-python'
 import { markdown } from '@codemirror/lang-markdown'
 import { cpp } from '@codemirror/lang-cpp'
+import { tags } from '@lezer/highlight'
 import { invoke } from '@tauri-apps/api/core'
 import './Editor.css'
 
 const isInitialContent = Annotation.define<boolean>()
+
+// Markdown用カスタムハイライトスタイル（ライトテーマ）
+const markdownHighlightStyleLight = HighlightStyle.define([
+  // 見出し
+  { tag: tags.heading1, color: '#e11d48', fontWeight: 'bold' },
+  { tag: tags.heading2, color: '#d97706', fontWeight: 'bold' },
+  { tag: tags.heading3, color: '#059669', fontWeight: 'bold' },
+  { tag: tags.heading4, color: '#0284c7', fontWeight: 'bold' },
+  { tag: tags.heading5, color: '#7c3aed', fontWeight: 'bold' },
+  { tag: tags.heading6, color: '#64748b', fontWeight: 'bold' },
+  
+  // 太字
+  { tag: tags.strong, fontWeight: 'bold', color: '#0f172a' },
+  
+  // 斜体
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#334155' },
+  
+  // 取り消し線
+  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#64748b' },
+  
+  // インラインコード
+  { tag: tags.monospace, color: '#e11d48', backgroundColor: 'rgba(225, 24, 72, 0.08)', borderRadius: '3px' },
+  
+  // コードブロック
+  { tag: tags.comment, color: '#059669' },
+  
+  // リンク
+  { tag: tags.url, color: '#0ea5e9', textDecoration: 'underline' },
+  { tag: tags.link, color: '#0ea5e9', textDecoration: 'underline' },
+  
+  // 引用
+  { tag: tags.quote, color: '#64748b', fontStyle: 'italic', backgroundColor: 'rgba(100, 116, 139, 0.08)' },
+  
+  // リスト
+  { tag: tags.list, color: '#0ea5e9', fontWeight: '600' },
+  
+  // 水平線
+  { tag: tags.contentSeparator, color: '#94a3b8' },
+  
+  // テーブル
+  { tag: tags.operator, color: '#64748b', fontWeight: '600' },
+])
+
+// Markdown用カスタムハイライトスタイル（ダークテーマ）
+const markdownHighlightStyleDark = HighlightStyle.define([
+  // 見出し
+  { tag: tags.heading1, color: '#fb7185', fontWeight: 'bold' },
+  { tag: tags.heading2, color: '#fbbf24', fontWeight: 'bold' },
+  { tag: tags.heading3, color: '#34d399', fontWeight: 'bold' },
+  { tag: tags.heading4, color: '#38bdf8', fontWeight: 'bold' },
+  { tag: tags.heading5, color: '#a78bfa', fontWeight: 'bold' },
+  { tag: tags.heading6, color: '#94a3b8', fontWeight: 'bold' },
+  
+  // 太字
+  { tag: tags.strong, fontWeight: 'bold', color: '#f8fafc' },
+  
+  // 斜体
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#cbd5e1' },
+  
+  // 取り消し線
+  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#94a3b8' },
+  
+  // インラインコード
+  { tag: tags.monospace, color: '#fb7185', backgroundColor: 'rgba(251, 113, 133, 0.12)', borderRadius: '3px' },
+  
+  // コードブロック
+  { tag: tags.comment, color: '#34d399' },
+  
+  // リンク
+  { tag: tags.url, color: '#38bdf8', textDecoration: 'underline' },
+  { tag: tags.link, color: '#38bdf8', textDecoration: 'underline' },
+  
+  // 引用
+  { tag: tags.quote, color: '#94a3b8', fontStyle: 'italic', backgroundColor: 'rgba(148, 163, 184, 0.12)' },
+  
+  // リスト
+  { tag: tags.list, color: '#38bdf8', fontWeight: '600' },
+  
+  // 水平線
+  { tag: tags.contentSeparator, color: '#64748b' },
+  
+  // テーブル
+  { tag: tags.operator, color: '#94a3b8', fontWeight: '600' },
+])
 
 interface EditorProps {
   initialContent: string
@@ -67,6 +153,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   const readOnlyCompartmentRef = useRef(new Compartment())
   const fontSizeCompartmentRef = useRef(new Compartment())
   const languageCompartmentRef = useRef(new Compartment())
+  const highlightCompartmentRef = useRef(new Compartment())
 
   const offsetRef = useRef(0)
   const totalSizeRef = useRef(0)
@@ -164,6 +251,9 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
           },
         })),
         languageCompartmentRef.current.of(getLanguageExtension(fileName)),
+        highlightCompartmentRef.current.of(
+          syntaxHighlighting(theme === 'dark' ? markdownHighlightStyleDark : markdownHighlightStyleLight)
+        ),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange && !update.transactions.some(tr => tr.annotation(isInitialContent))) {
             onChange(update.state.doc.toString())
@@ -207,6 +297,11 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
 
     viewRef.current.dispatch({
       effects: themeCompartmentRef.current.reconfigure(theme === 'dark' ? oneDark : []),
+    })
+    viewRef.current.dispatch({
+      effects: highlightCompartmentRef.current.reconfigure(
+        syntaxHighlighting(theme === 'dark' ? markdownHighlightStyleDark : markdownHighlightStyleLight)
+      ),
     })
   }, [theme])
 

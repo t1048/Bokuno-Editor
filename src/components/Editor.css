@@ -11,3 +11,200 @@
 .editor .cm-focused {
   outline: none;
 }
+
+/* ========================================
+   Markdown Editモード シンタックスハイライト
+   レイアウト崩れを避けるため、以下のスタイルのみ使用:
+   - color, font-weight, font-style, background-color, text-decoration
+   ======================================== */
+
+/* --- 見出し (H1-H6) --- */
+.editor .cm-header {
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.editor .cm-header1 {
+  color: #e11d48; /* rose-600 */
+}
+
+.editor .cm-header2 {
+  color: #d97706; /* amber-600 */
+}
+
+.editor .cm-header3 {
+  color: #059669; /* emerald-600 */
+}
+
+.editor .cm-header4 {
+  color: #0284c7; /* sky-600 */
+}
+
+.editor .cm-header5 {
+  color: #7c3aed; /* violet-600 */
+}
+
+.editor .cm-header6 {
+  color: #64748b; /* slate-500 */
+}
+
+/* ダークテーマ用の見出し色調整 */
+:root[data-theme='dark'] .editor .cm-header1 {
+  color: #fb7185; /* rose-400 */
+}
+
+:root[data-theme='dark'] .editor .cm-header2 {
+  color: #fbbf24; /* amber-400 */
+}
+
+:root[data-theme='dark'] .editor .cm-header3 {
+  color: #34d399; /* emerald-400 */
+}
+
+:root[data-theme='dark'] .editor .cm-header4 {
+  color: #38bdf8; /* sky-400 */
+}
+
+:root[data-theme='dark'] .editor .cm-header5 {
+  color: #a78bfa; /* violet-400 */
+}
+
+:root[data-theme='dark'] .editor .cm-header6 {
+  color: #94a3b8; /* slate-400 */
+}
+
+/* --- 太字 --- */
+.editor .cm-strong {
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+/* --- 斜体 --- */
+.editor .cm-emphasis,
+.editor .cm-em {
+  font-style: italic;
+  color: var(--color-text);
+}
+
+/* --- 取り消し線 --- */
+.editor .cm-strikethrough,
+.editor .cm-strike {
+  text-decoration: line-through;
+  color: var(--color-muted-text);
+}
+
+/* --- インラインコード --- */
+.editor .cm-inline-code,
+.editor .cm-inlineCode,
+.editor .cm-code {
+  background-color: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  color: #e11d48; /* rose-600 */
+}
+
+:root[data-theme='dark'] .editor .cm-inline-code,
+:root[data-theme='dark'] .editor .cm-inlineCode,
+:root[data-theme='dark'] .editor .cm-code {
+  color: #fb7185; /* rose-400 */
+  background-color: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+
+/* --- コードブロック --- */
+.editor .cm-comment,
+.editor .cm-codeBlock {
+  color: #059669; /* emerald-600 */
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+:root[data-theme='dark'] .editor .cm-comment,
+:root[data-theme='dark'] .editor .cm-codeBlock {
+  color: #34d399; /* emerald-400 */
+}
+
+/* --- リンク --- */
+.editor .cm-url {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-link) 50%, transparent);
+}
+
+.editor .cm-url:hover {
+  text-decoration-color: var(--color-link);
+}
+
+/* --- 引用 --- */
+.editor .cm-quote {
+  color: var(--color-muted-text);
+  font-style: italic;
+  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+:root[data-theme='dark'] .editor .cm-quote {
+  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
+}
+
+/* --- リストマーカー --- */
+.editor .cm-list {
+  color: var(--color-link);
+  font-weight: 600;
+}
+
+/* --- 水平線 --- */
+.editor .cm-hr {
+  color: var(--color-border);
+}
+
+/* --- テーブル関連 --- */
+.editor .cm-table-separator {
+  color: var(--color-muted-text);
+  font-weight: 600;
+}
+
+/* --- Markdown記号（#, *, _, ~, `, > など）のスタイル --- */
+.editor .cm-formatting {
+  color: var(--color-muted-text);
+  font-weight: 600;
+}
+
+.editor .cm-formatting-header {
+  color: var(--color-muted-text);
+  font-weight: 700;
+}
+
+.editor .cm-formatting-strong {
+  color: var(--color-muted-text);
+  font-weight: 700;
+}
+
+.editor .cm-formatting-emphasis {
+  color: var(--color-muted-text);
+  font-style: italic;
+}
+
+.editor .cm-formatting-strikethrough {
+  color: var(--color-muted-text);
+  text-decoration: line-through;
+}
+
+.editor .cm-formatting-code {
+  color: var(--color-muted-text);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+.editor .cm-formatting-link {
+  color: var(--color-muted-text);
+}
+
+.editor .cm-formatting-list {
+  color: var(--color-link);
+  font-weight: 600;
+}
+
+.editor .cm-formatting-quote {
+  color: var(--color-muted-text);
+  font-weight: 700;
+}

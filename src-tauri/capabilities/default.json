@@ -10,6 +10,10 @@
     "core:window:allow-destroy",
     "core:window:allow-close",
     "dialog:default",
-    "dialog:allow-ask"
+    "dialog:allow-ask",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://**" }, { "url": "https://**" }]
+    }
   ]
 }
