@@ -39,6 +39,7 @@
   --color-scrollbar-thumb-hover: rgba(148, 163, 184, 0.6);
   
   --color-danger-hover: #ef4444;
+  --color-link: #0ea5e9;
   
   --color-pill-bg: rgba(14, 165, 233, 0.1);
   --color-pill-text: #0369a1;
@@ -95,6 +96,7 @@
   --color-scrollbar-thumb-hover: rgba(148, 163, 184, 0.4);
   
   --color-danger-hover: #ef4444;
+  --color-link: #38bdf8;
   
   --color-pill-bg: rgba(56, 189, 248, 0.15);
   --color-pill-text: #7dd3fc;

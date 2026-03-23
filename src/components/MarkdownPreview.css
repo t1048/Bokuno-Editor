@@ -130,12 +130,19 @@
 
 /* リンク */
 .markdown-body a {
-  color: var(--color-button-bg, #4f8ef7);
-  text-decoration: none;
+  color: var(--color-link, #0ea5e9);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-link, #0ea5e9) 50%, transparent);
+  cursor: default;
 }
 
 .markdown-body a:hover {
   text-decoration: underline;
+  text-decoration-color: var(--color-link, #0ea5e9);
+}
+
+.markdown-body a[href]:hover {
+  cursor: pointer;
 }
 
 /* 画像 */

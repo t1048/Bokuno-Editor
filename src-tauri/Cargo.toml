@@ -24,6 +24,7 @@ log = "0.4"
 tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 ignore = "0.4"
 regex = "1.10"
 tokio = { version = "1.35", features = ["rt-multi-thread", "fs", "time"] }

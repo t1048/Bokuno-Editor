@@ -732,6 +732,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(log_builder.build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(TailWatcher::default())
         .invoke_handler(tauri::generate_handler![
             read_directory,
