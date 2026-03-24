@@ -4,12 +4,20 @@
   overflow: hidden;
 }
 
-.editor .cm-editor {
-  height: 100%;
+.editor .cm-line {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
-.editor .cm-focused {
-  outline: none;
+.editor .cm-activeLine {
+  background-color: color-mix(in srgb, var(--color-active-item) 30%, transparent);
+}
+
+.editor .cm-gutters {
+  background-color: var(--color-editor-shell);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-muted-text);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
 }
 
 /* ========================================
@@ -21,56 +29,35 @@
 /* --- 見出し (H1-H6) --- */
 .editor .cm-header {
   font-weight: 700;
-  color: var(--color-text-strong);
+  color: inherit;
 }
 
 .editor .cm-header1 {
-  color: #e11d48; /* rose-600 */
+  font-size: 1.8em;
+  padding-bottom: 0.2rem;
+  border-bottom: 2px solid var(--color-border);
 }
 
 .editor .cm-header2 {
-  color: #d97706; /* amber-600 */
+  font-size: 1.5em;
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .editor .cm-header3 {
-  color: #059669; /* emerald-600 */
+  font-size: 1.25em;
 }
 
 .editor .cm-header4 {
-  color: #0284c7; /* sky-600 */
+  font-size: 1.1em;
 }
 
 .editor .cm-header5 {
-  color: #7c3aed; /* violet-600 */
+  font-size: 1em;
 }
 
 .editor .cm-header6 {
-  color: #64748b; /* slate-500 */
-}
-
-/* ダークテーマ用の見出し色調整 */
-:root[data-theme='dark'] .editor .cm-header1 {
-  color: #fb7185; /* rose-400 */
-}
-
-:root[data-theme='dark'] .editor .cm-header2 {
-  color: #fbbf24; /* amber-400 */
-}
-
-:root[data-theme='dark'] .editor .cm-header3 {
-  color: #34d399; /* emerald-400 */
-}
-
-:root[data-theme='dark'] .editor .cm-header4 {
-  color: #38bdf8; /* sky-400 */
-}
-
-:root[data-theme='dark'] .editor .cm-header5 {
-  color: #a78bfa; /* violet-400 */
-}
-
-:root[data-theme='dark'] .editor .cm-header6 {
-  color: #94a3b8; /* slate-400 */
+  font-size: 1em;
 }
 
 /* --- 太字 --- */
@@ -83,7 +70,6 @@
 .editor .cm-emphasis,
 .editor .cm-em {
   font-style: italic;
-  color: var(--color-text);
 }
 
 /* --- 取り消し線 --- */
@@ -97,18 +83,19 @@
 .editor .cm-inline-code,
 .editor .cm-inlineCode,
 .editor .cm-code {
-  background-color: color-mix(in srgb, var(--color-surface) 80%, transparent);
-  border-radius: 3px;
-  padding: 1px 4px;
+  background-color: color-mix(in srgb, var(--color-surface-elevated) 40%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-  color: #e11d48; /* rose-600 */
+  font-size: 0.9em;
+  color: var(--color-text-strong);
 }
 
 :root[data-theme='dark'] .editor .cm-inline-code,
 :root[data-theme='dark'] .editor .cm-inlineCode,
 :root[data-theme='dark'] .editor .cm-code {
-  color: #fb7185; /* rose-400 */
-  background-color: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  background-color: color-mix(in srgb, var(--color-surface-elevated) 60%, transparent);
 }
 
 /* --- コードブロック --- */
@@ -116,87 +103,41 @@
 .editor .cm-codeBlock {
   color: #059669; /* emerald-600 */
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  background-color: color-mix(in srgb, var(--color-surface-elevated) 40%, transparent);
 }
 
 :root[data-theme='dark'] .editor .cm-comment,
 :root[data-theme='dark'] .editor .cm-codeBlock {
   color: #34d399; /* emerald-400 */
+  background-color: color-mix(in srgb, var(--color-surface-elevated) 60%, transparent);
 }
 
 /* --- リンク --- */
-.editor .cm-url {
+.editor .cm-url,
+.editor .cm-link {
   color: var(--color-link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-link) 50%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-link) 40%, transparent);
 }
 
-.editor .cm-url:hover {
+.editor .cm-url:hover,
+.editor .cm-link:hover {
   text-decoration-color: var(--color-link);
 }
 
 /* --- 引用 --- */
 .editor .cm-quote {
-  color: var(--color-muted-text);
+  color: var(--color-text);
   font-style: italic;
-  background-color: color-mix(in srgb, var(--color-surface) 50%, transparent);
-  border-radius: 3px;
-  padding: 1px 4px;
-}
-
-:root[data-theme='dark'] .editor .cm-quote {
-  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
+  background-color: color-mix(in srgb, var(--color-surface-elevated) 30%, transparent);
+  border-left: 4px solid var(--color-link);
+  padding: 0.2rem 0.8rem;
+  margin-left: 0.1rem;
 }
 
 /* --- リストマーカー --- */
 .editor .cm-list {
-  color: var(--color-link);
-  font-weight: 600;
-}
-
-/* --- 水平線 --- */
-.editor .cm-hr {
-  color: var(--color-border);
-}
-
-/* --- テーブル関連 --- */
-.editor .cm-table-separator {
-  color: var(--color-muted-text);
-  font-weight: 600;
-}
-
-/* --- Markdown記号（#, *, _, ~, `, > など）のスタイル --- */
-.editor .cm-formatting {
-  color: var(--color-muted-text);
-  font-weight: 600;
-}
-
-.editor .cm-formatting-header {
-  color: var(--color-muted-text);
-  font-weight: 700;
-}
-
-.editor .cm-formatting-strong {
-  color: var(--color-muted-text);
-  font-weight: 700;
-}
-
-.editor .cm-formatting-emphasis {
-  color: var(--color-muted-text);
-  font-style: italic;
-}
-
-.editor .cm-formatting-strikethrough {
-  color: var(--color-muted-text);
-  text-decoration: line-through;
-}
-
-.editor .cm-formatting-code {
-  color: var(--color-muted-text);
-  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-}
-
-.editor .cm-formatting-link {
-  color: var(--color-muted-text);
+  color: inherit;
 }
 
 .editor .cm-formatting-list {
@@ -204,7 +145,29 @@
   font-weight: 600;
 }
 
-.editor .cm-formatting-quote {
+/* --- 水平線 --- */
+.editor .cm-hr {
+  display: block;
+  width: 100%;
+  border-bottom: 2px solid var(--color-border);
+  color: var(--color-border);
+}
+
+/* --- テーブル関連 --- */
+.editor .cm-table-separator {
   color: var(--color-muted-text);
+  font-weight: 600;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+/* --- Markdown記号（#, *, _, ~, `, > など）のスタイル --- */
+.editor .cm-formatting {
+  color: var(--color-muted-text);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.editor .cm-formatting-header {
   font-weight: 700;
+  margin-right: 0.2rem;
 }
