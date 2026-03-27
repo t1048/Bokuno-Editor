@@ -21,7 +21,7 @@
 }
 
 /* ========================================
-   Markdown Editモード シンタックスハイライト
+   Markdown Edit モード シンタックスハイライト
    レイアウト崩れを避けるため、以下のスタイルのみ使用:
    - color, font-weight, font-style, background-color, text-decoration
    ======================================== */
@@ -35,104 +35,179 @@
 .editor .cm-header1 {
   font-size: 1.8em;
   padding-bottom: 0.2rem;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 2px solid #0284c7;
+  color: #0284c7;
 }
 
 .editor .cm-header2 {
   font-size: 1.5em;
   padding-bottom: 0.15rem;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #0ea5e9;
+  color: #0ea5e9;
 }
 
 .editor .cm-header3 {
   font-size: 1.25em;
+  color: #38bdf8;
 }
 
 .editor .cm-header4 {
   font-size: 1.1em;
+  color: #7dd3fc;
 }
 
 .editor .cm-header5 {
   font-size: 1em;
+  color: #bae6fd;
 }
 
 .editor .cm-header6 {
   font-size: 1em;
+  color: #e0f2fe;
+}
+
+/* ダークテーマの見出し */
+:root[data-theme='dark'] .editor .cm-header1 {
+  border-bottom-color: #38bdf8;
+  color: #38bdf8;
+}
+
+:root[data-theme='dark'] .editor .cm-header2 {
+  border-bottom-color: #7dd3fc;
+  color: #7dd3fc;
+}
+
+:root[data-theme='dark'] .editor .cm-header3 {
+  color: #bae6fd;
+}
+
+:root[data-theme='dark'] .editor .cm-header4 {
+  color: #e0f2fe;
+}
+
+:root[data-theme='dark'] .editor .cm-header5 {
+  color: #f0f9ff;
+}
+
+:root[data-theme='dark'] .editor .cm-header6 {
+  color: #ffffff;
 }
 
 /* --- 太字 --- */
 .editor .cm-strong {
   font-weight: 700;
-  color: var(--color-text-strong);
+  color: #1e293b;
+  background-color: #f1f5f9;
+}
+
+:root[data-theme='dark'] .editor .cm-strong {
+  color: #f8fafc;
+  background-color: #1e293b;
 }
 
 /* --- 斜体 --- */
 .editor .cm-emphasis,
 .editor .cm-em {
   font-style: italic;
+  color: #475569;
+  background-color: #fef3c7;
+}
+
+:root[data-theme='dark'] .editor .cm-emphasis,
+:root[data-theme='dark'] .editor .cm-em {
+  color: #cbd5e1;
+  background-color: #422006;
 }
 
 /* --- 取り消し線 --- */
 .editor .cm-strikethrough,
 .editor .cm-strike {
   text-decoration: line-through;
-  color: var(--color-muted-text);
+  color: #94a3b8;
+  background-color: #fee2e2;
+}
+
+:root[data-theme='dark'] .editor .cm-strikethrough,
+:root[data-theme='dark'] .editor .cm-strike {
+  color: #64748b;
+  background-color: #450a0a;
 }
 
 /* --- インラインコード --- */
 .editor .cm-inline-code,
 .editor .cm-inlineCode,
 .editor .cm-code {
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 40%, transparent);
-  border: 1px solid var(--color-border);
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
   border-radius: 4px;
   padding: 0.1rem 0.3rem;
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
   font-size: 0.9em;
-  color: var(--color-text-strong);
+  color: #059669;
 }
 
 :root[data-theme='dark'] .editor .cm-inline-code,
 :root[data-theme='dark'] .editor .cm-inlineCode,
 :root[data-theme='dark'] .editor .cm-code {
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 60%, transparent);
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #34d399;
 }
 
 /* --- コードブロック --- */
 .editor .cm-comment,
 .editor .cm-codeBlock {
-  color: #059669; /* emerald-600 */
+  color: #047857;
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 40%, transparent);
+  background-color: #ecfdf5;
 }
 
 :root[data-theme='dark'] .editor .cm-comment,
 :root[data-theme='dark'] .editor .cm-codeBlock {
-  color: #34d399; /* emerald-400 */
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 60%, transparent);
+  color: #6ee7b7;
+  background-color: #064e3b;
 }
 
 /* --- リンク --- */
 .editor .cm-url,
 .editor .cm-link {
-  color: var(--color-link);
+  color: #0284c7;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-link) 40%, transparent);
+  text-decoration-color: color-mix(in srgb, #0284c7 60%, transparent);
+  font-weight: 500;
 }
 
 .editor .cm-url:hover,
 .editor .cm-link:hover {
-  text-decoration-color: var(--color-link);
+  text-decoration-color: #0284c7;
+  text-decoration-thickness: 2px;
+}
+
+:root[data-theme='dark'] .editor .cm-url,
+:root[data-theme='dark'] .editor .cm-link {
+  color: #38bdf8;
+  text-decoration-color: color-mix(in srgb, #38bdf8 60%, transparent);
+}
+
+:root[data-theme='dark'] .editor .cm-url:hover,
+:root[data-theme='dark'] .editor .cm-link:hover {
+  text-decoration-color: #38bdf8;
 }
 
 /* --- 引用 --- */
 .editor .cm-quote {
-  color: var(--color-text);
+  color: #78350f;
   font-style: italic;
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 30%, transparent);
-  border-left: 4px solid var(--color-link);
+  background-color: #fef3c7;
+  border-left: 4px solid #f59e0b;
   padding: 0.2rem 0.8rem;
   margin-left: 0.1rem;
+}
+
+:root[data-theme='dark'] .editor .cm-quote {
+  color: #fde68a;
+  background-color: #422006;
+  border-left-color: #fbbf24;
 }
 
 /* --- リストマーカー --- */
@@ -141,33 +216,141 @@
 }
 
 .editor .cm-formatting-list {
-  color: var(--color-link);
-  font-weight: 600;
+  color: #0284c7;
+  font-weight: 700;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-list {
+  color: #38bdf8;
 }
 
 /* --- 水平線 --- */
 .editor .cm-hr {
   display: block;
   width: 100%;
-  border-bottom: 2px solid var(--color-border);
-  color: var(--color-border);
+  border-bottom: 2px solid #cbd5e1;
+  color: #cbd5e1;
+}
+
+:root[data-theme='dark'] .editor .cm-hr {
+  border-bottom-color: #475569;
+  color: #475569;
 }
 
 /* --- テーブル関連 --- */
 .editor .cm-table-separator {
-  color: var(--color-muted-text);
-  font-weight: 600;
+  color: #64748b;
+  font-weight: 700;
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  background-color: #f1f5f9;
 }
 
-/* --- Markdown記号（#, *, _, ~, `, > など）のスタイル --- */
+:root[data-theme='dark'] .editor .cm-table-separator {
+  color: #94a3b8;
+  background-color: #1e293b;
+}
+
+/* テーブルセル */
+.editor .cm-table-cell {
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #e2e8f0;
+}
+
+:root[data-theme='dark'] .editor .cm-table-cell {
+  border-color: #334155;
+}
+
+/* テーブルヘッダー */
+.editor .cm-table-header {
+  font-weight: 700;
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+:root[data-theme='dark'] .editor .cm-table-header {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+/* --- Markdown 記号（#, *, _, ~, `, > など）のスタイル --- */
 .editor .cm-formatting {
-  color: var(--color-muted-text);
+  color: #94a3b8;
   font-weight: 400;
   opacity: 0.7;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting {
+  color: #64748b;
 }
 
 .editor .cm-formatting-header {
   font-weight: 700;
   margin-right: 0.2rem;
+  color: #0284c7;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-header {
+  color: #38bdf8;
+}
+
+/* --- ブロック引用の開始記号 --- */
+.editor .cm-formatting-quote {
+  color: #f59e0b;
+  font-weight: 700;
+  margin-right: 0.3rem;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-quote {
+  color: #fbbf24;
+}
+
+/* --- コードブロックのバックティック --- */
+.editor .cm-formatting-code {
+  color: #059669;
+  font-weight: 600;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-code {
+  color: #34d399;
+}
+
+/* --- リスト項目の内容 --- */
+.editor .cm-list-content {
+  padding-left: 0.5rem;
+}
+
+/* --- 番号付きリストの番号 --- */
+.editor .cm-formatting-number {
+  color: #0284c7;
+  font-weight: 700;
+  margin-right: 0.3rem;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-number {
+  color: #38bdf8;
+}
+
+/* --- チェックボックス --- */
+.editor .cm-formatting-checkbox {
+  color: #0284c7;
+  font-weight: 700;
+  background-color: #e0f2fe;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  margin-right: 0.3rem;
+}
+
+:root[data-theme='dark'] .editor .cm-formatting-checkbox {
+  color: #38bdf8;
+  background-color: #0c4a6e;
+}
+
+/* --- エスケープ文字 --- */
+.editor .cm-escape {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+:root[data-theme='dark'] .editor .cm-escape {
+  color: #64748b;
 }
