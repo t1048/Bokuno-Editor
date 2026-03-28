@@ -16,7 +16,7 @@ interface CsvEditorProps {
 
 const ROW_HEIGHT = 32;
 const COL_WIDTH = 150;
-const HEADER_WIDTH = 110;
+const HEADER_WIDTH = 60;
 const HEADER_HEIGHT = 32;
 
 interface FileMetadata {
@@ -165,8 +165,6 @@ interface HeaderCellProps {
   selectedColumn: number | null;
   isLoading: boolean;
   colCount: number;
-  onInsertColumnBefore: (colIndex: number) => void;
-  onInsertColumnAfter: (colIndex: number) => void;
   onDeleteColumn: (colIndex: number) => void;
   onSelectColumn: (colIndex: number) => void;
   ariaAttributes: {
@@ -181,8 +179,6 @@ function HeaderCell({
   selectedColumn,
   isLoading,
   colCount,
-  onInsertColumnBefore,
-  onInsertColumnAfter,
   onDeleteColumn,
   onSelectColumn,
   ariaAttributes,
@@ -196,41 +192,17 @@ function HeaderCell({
       onClick={() => onSelectColumn(columnIndex)}
       {...ariaAttributes}
     >
-      <div className="csv-header-content">
-        <span className="csv-header-title">{columnName}</span>
-      </div>
-      <div className="csv-header-actions" role="group" aria-label={`${columnName}列の操作`}>
-        <button
-          type="button"
-          className="csv-header-action-btn"
-          title="この列の左に列を挿入"
-          aria-label={`${columnName}列の左に列を挿入`}
-          disabled={isLoading}
-          onClick={(e) => { e.stopPropagation(); onInsertColumnBefore(columnIndex); }}
-        >
-          ←+
-        </button>
-        <button
-          type="button"
-          className="csv-header-action-btn"
-          title="この列の右に列を挿入"
-          aria-label={`${columnName}列の右に列を挿入`}
-          disabled={isLoading}
-          onClick={(e) => { e.stopPropagation(); onInsertColumnAfter(columnIndex); }}
-        >
-          +→
-        </button>
-        <button
-          type="button"
-          className="csv-header-action-btn csv-header-action-btn--delete"
-          title="この列を削除"
-          aria-label={`${columnName}列を削除`}
-          disabled={isLoading || colCount <= 1}
-          onClick={(e) => { e.stopPropagation(); onDeleteColumn(columnIndex); }}
-        >
-          −
-        </button>
-      </div>
+      <span className="csv-header-title">{columnName}</span>
+      <button
+        type="button"
+        className="csv-header-delete-btn"
+        title={`${columnName}列を削除`}
+        aria-label={`${columnName}列を削除`}
+        disabled={isLoading || colCount <= 1}
+        onClick={(e) => { e.stopPropagation(); onDeleteColumn(columnIndex); }}
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -241,8 +213,6 @@ interface RowHeaderProps {
   selectedRow: number | null;
   isLoading: boolean;
   rowCount: number;
-  onInsertRowBefore: (index: number) => void;
-  onInsertRowAfter: (index: number) => void;
   onDeleteRow: (index: number) => void;
   onSelectRow: (index: number) => void;
   ariaAttributes: {
@@ -258,8 +228,6 @@ function RowHeader({
   selectedRow,
   isLoading,
   rowCount,
-  onInsertRowBefore,
-  onInsertRowAfter,
   onDeleteRow,
   onSelectRow,
   ariaAttributes,
@@ -273,41 +241,17 @@ function RowHeader({
       onClick={() => onSelectRow(index)}
       {...ariaAttributes}
     >
-      <div className="csv-header-content">
-        <span className="csv-header-title">{rowLabel}</span>
-      </div>
-      <div className="csv-header-actions csv-header-actions--row" role="group" aria-label={`${rowLabel}行の操作`}>
-        <button
-          type="button"
-          className="csv-header-action-btn"
-          title="この行の上に行を挿入"
-          aria-label={`${rowLabel}行の上に行を挿入`}
-          disabled={isLoading}
-          onClick={(e) => { e.stopPropagation(); onInsertRowBefore(index); }}
-        >
-          ↑+
-        </button>
-        <button
-          type="button"
-          className="csv-header-action-btn"
-          title="この行の下に行を挿入"
-          aria-label={`${rowLabel}行の下に行を挿入`}
-          disabled={isLoading}
-          onClick={(e) => { e.stopPropagation(); onInsertRowAfter(index); }}
-        >
-          +↓
-        </button>
-        <button
-          type="button"
-          className="csv-header-action-btn csv-header-action-btn--delete"
-          title="この行を削除"
-          aria-label={`${rowLabel}行を削除`}
-          disabled={isLoading || rowCount <= 1}
-          onClick={(e) => { e.stopPropagation(); onDeleteRow(index); }}
-        >
-          −
-        </button>
-      </div>
+      <span className="csv-header-title">{rowLabel}</span>
+      <button
+        type="button"
+        className="csv-header-delete-btn"
+        title={`${rowLabel}行を削除`}
+        aria-label={`${rowLabel}行を削除`}
+        disabled={isLoading || rowCount <= 1}
+        onClick={(e) => { e.stopPropagation(); onDeleteRow(index); }}
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -326,7 +270,12 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
   const sideRef = useRef<any>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const isComposingRef = useRef(false);
+  const scrollTopRef = useRef(0);
+  const scrollLeftRef = useRef(0);
   const canUseVirtualGrid = true;
+
+  const [hoveredRowBoundary, setHoveredRowBoundary] = useState<number | null>(null);
+  const [hoveredColBoundary, setHoveredColBoundary] = useState<number | null>(null);
 
   const emitChange = useCallback((nextData: string[][]) => {
     const csv = Papa.unparse(nextData);
@@ -337,6 +286,8 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
   // Sync scrolling
   const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const { scrollLeft, scrollTop } = event.currentTarget;
+    scrollTopRef.current = scrollTop;
+    scrollLeftRef.current = scrollLeft;
     if (headerRef.current?.element && headerRef.current.element.scrollLeft !== scrollLeft) {
       headerRef.current.element.scrollLeft = scrollLeft;
     }
@@ -599,6 +550,45 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
     setSelectedCell((prev) => ({ row: prev?.row ?? 0, col: colIndex }));
   }, []);
 
+  const handleContainerMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const relX = event.clientX - rect.left;
+    const relY = event.clientY - rect.top;
+    const scrollTop = scrollTopRef.current;
+    const scrollLeft = scrollLeftRef.current;
+
+    if (relY > HEADER_HEIGHT) {
+      const dataY = relY - HEADER_HEIGHT + scrollTop;
+      const boundaryIndex = Math.round(dataY / ROW_HEIGHT);
+      const boundaryScreenY = HEADER_HEIGHT + boundaryIndex * ROW_HEIGHT - scrollTop;
+      if (Math.abs(relY - boundaryScreenY) < 7 && boundaryIndex >= 0 && boundaryIndex <= rowCount) {
+        setHoveredRowBoundary(boundaryIndex);
+      } else {
+        setHoveredRowBoundary(null);
+      }
+    } else {
+      setHoveredRowBoundary(null);
+    }
+
+    if (relX > HEADER_WIDTH) {
+      const dataX = relX - HEADER_WIDTH + scrollLeft;
+      const boundaryIndex = Math.round(dataX / COL_WIDTH);
+      const boundaryScreenX = HEADER_WIDTH + boundaryIndex * COL_WIDTH - scrollLeft;
+      if (Math.abs(relX - boundaryScreenX) < 7 && boundaryIndex >= 0 && boundaryIndex <= colCount) {
+        setHoveredColBoundary(boundaryIndex);
+      } else {
+        setHoveredColBoundary(null);
+      }
+    } else {
+      setHoveredColBoundary(null);
+    }
+  }, [rowCount, colCount]);
+
+  const handleContainerMouseLeave = useCallback(() => {
+    setHoveredRowBoundary(null);
+    setHoveredColBoundary(null);
+  }, []);
+
   const handleInsertRowAt = useCallback((insertIndex: number) => {
     if (isLoading) return;
     setEditingCell(null);
@@ -694,14 +684,8 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
                 <th className="csv-fallback-index">#</th>
                 {Array.from({ length: colCount }).map((_, index) => (
                   <th key={index} className={`csv-cell-header csv-col-header ${selectedColumn === index ? 'csv-header--selected' : ''}`} onClick={() => handleSelectColumn(index)}>
-                    <div className="csv-header-content">
-                      <span className="csv-header-title">{getColumnName(index)}</span>
-                    </div>
-                    <div className="csv-header-actions" role="group" aria-label={`${getColumnName(index)}列の操作`}>
-                      <button type="button" className="csv-header-action-btn" title="この列の左に列を挿入" aria-label={`${getColumnName(index)}列の左に列を挿入`} disabled={isLoading} onClick={(e) => { e.stopPropagation(); handleInsertColumnBefore(index); }}>←+</button>
-                      <button type="button" className="csv-header-action-btn" title="この列の右に列を挿入" aria-label={`${getColumnName(index)}列の右に列を挿入`} disabled={isLoading} onClick={(e) => { e.stopPropagation(); handleInsertColumnAfter(index); }}>+→</button>
-                      <button type="button" className="csv-header-action-btn csv-header-action-btn--delete" title="この列を削除" aria-label={`${getColumnName(index)}列を削除`} disabled={isLoading || colCount <= 1} onClick={(e) => { e.stopPropagation(); handleDeleteColumn(index); }}>−</button>
-                    </div>
+                    <span className="csv-header-title">{getColumnName(index)}</span>
+                    <button type="button" className="csv-header-delete-btn" title={`${getColumnName(index)}列を削除`} aria-label={`${getColumnName(index)}列を削除`} disabled={isLoading || colCount <= 1} onClick={(e) => { e.stopPropagation(); handleDeleteColumn(index); }}>×</button>
                   </th>
                 ))}
               </tr>
@@ -710,14 +694,8 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
               {data.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   <td className={`csv-cell-header csv-row-header csv-fallback-index ${selectedRow === rowIndex ? 'csv-header--selected' : ''}`} onClick={() => handleSelectRow(rowIndex)}>
-                    <div className="csv-header-content">
-                      <span className="csv-header-title">{rowIndex + 1}</span>
-                    </div>
-                    <div className="csv-header-actions csv-header-actions--row" role="group" aria-label={`${rowIndex + 1}行の操作`}>
-                      <button type="button" className="csv-header-action-btn" title="この行の上に行を挿入" aria-label={`${rowIndex + 1}行の上に行を挿入`} disabled={isLoading} onClick={(e) => { e.stopPropagation(); handleInsertRowBefore(rowIndex); }}>↑+</button>
-                      <button type="button" className="csv-header-action-btn" title="この行の下に行を挿入" aria-label={`${rowIndex + 1}行の下に行を挿入`} disabled={isLoading} onClick={(e) => { e.stopPropagation(); handleInsertRowAfter(rowIndex); }}>+↓</button>
-                      <button type="button" className="csv-header-action-btn csv-header-action-btn--delete" title="この行を削除" aria-label={`${rowIndex + 1}行を削除`} disabled={isLoading || rowCount <= 1} onClick={(e) => { e.stopPropagation(); handleDeleteRow(rowIndex); }}>−</button>
-                    </div>
+                    <span className="csv-header-title">{rowIndex + 1}</span>
+                    <button type="button" className="csv-header-delete-btn" title={`${rowIndex + 1}行を削除`} aria-label={`${rowIndex + 1}行を削除`} disabled={isLoading || rowCount <= 1} onClick={(e) => { e.stopPropagation(); handleDeleteRow(rowIndex); }}>×</button>
                   </td>
                   {Array.from({ length: colCount }).map((_, colIndex) => (
                     <td key={colIndex}>
@@ -769,7 +747,11 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
     <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`} ref={editorRef}>
       {loadError && <div className="csv-error-banner">{loadError}</div>}
       <div className="csv-virtual-container">
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div
+          style={{ position: 'relative', width: '100%', height: '100%' }}
+          onMouseMove={handleContainerMouseMove}
+          onMouseLeave={handleContainerMouseLeave}
+        >
           <div
             className="csv-cell-header csv-corner"
             style={{
@@ -803,7 +785,7 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
               rowHeight={HEADER_HEIGHT}
               style={{ overflow: 'hidden' }}
               cellComponent={HeaderCell}
-              cellProps={{ selectedColumn, isLoading, colCount, onInsertColumnBefore: handleInsertColumnBefore, onInsertColumnAfter: handleInsertColumnAfter, onDeleteColumn: handleDeleteColumn, onSelectColumn: handleSelectColumn } as any}
+              cellProps={{ selectedColumn, isLoading, colCount, onDeleteColumn: handleDeleteColumn, onSelectColumn: handleSelectColumn } as any}
             />
           </div>
 
@@ -825,7 +807,7 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
               defaultHeight={ROW_HEIGHT * 10}
               style={{ overflow: 'hidden' }}
               rowComponent={RowHeader}
-              rowProps={{ selectedRow, isLoading, rowCount, onInsertRowBefore: handleInsertRowBefore, onInsertRowAfter: handleInsertRowAfter, onDeleteRow: handleDeleteRow, onSelectRow: handleSelectRow } as any}
+              rowProps={{ selectedRow, isLoading, rowCount, onDeleteRow: handleDeleteRow, onSelectRow: handleSelectRow } as any}
             />
           </div>
 
@@ -851,6 +833,50 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
               cellProps={{ data, isLoading, onCellChange: handleCellChange, onSelectCell: handleSelectCell, onStartEditingCell: startEditingCell, onStopEditingCell: stopEditingCell, onCellViewerKeyDown: handleCellViewerKeyDown, onCellEditorKeyDown: handleCellEditorKeyDown, onCellCompositionStart: () => { isComposingRef.current = true; }, onCellCompositionEnd: () => { isComposingRef.current = false; }, selectedCell, editingCell } as any}
             />
           </div>
+
+          {hoveredRowBoundary !== null && (() => {
+            const y = HEADER_HEIGHT + hoveredRowBoundary * ROW_HEIGHT - scrollTopRef.current;
+            if (y < HEADER_HEIGHT) return null;
+            return (
+              <div
+                className="csv-insert-line csv-insert-row-line"
+                style={{ top: y }}
+              >
+                <button
+                  type="button"
+                  className="csv-insert-btn"
+                  disabled={isLoading}
+                  title={hoveredRowBoundary === 0 ? '先頭に行を挿入' : `${hoveredRowBoundary}行目の後に行を挿入`}
+                  onClick={(e) => { e.stopPropagation(); handleInsertRowAt(hoveredRowBoundary); }}
+                  onMouseEnter={() => setHoveredRowBoundary(hoveredRowBoundary)}
+                >
+                  +
+                </button>
+              </div>
+            );
+          })()}
+
+          {hoveredColBoundary !== null && (() => {
+            const x = HEADER_WIDTH + hoveredColBoundary * COL_WIDTH - scrollLeftRef.current;
+            if (x < HEADER_WIDTH) return null;
+            return (
+              <div
+                className="csv-insert-line csv-insert-col-line"
+                style={{ left: x }}
+              >
+                <button
+                  type="button"
+                  className="csv-insert-btn"
+                  disabled={isLoading}
+                  title={hoveredColBoundary === 0 ? '先頭に列を挿入' : `${getColumnName(hoveredColBoundary - 1)}列の後に列を挿入`}
+                  onClick={(e) => { e.stopPropagation(); handleInsertColumnAt(hoveredColBoundary); }}
+                  onMouseEnter={() => setHoveredColBoundary(hoveredColBoundary)}
+                >
+                  +
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
       {isLoading && <div className="csv-loading-overlay">{loadingLabel}</div>}

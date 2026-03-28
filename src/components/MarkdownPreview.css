@@ -62,6 +62,7 @@
 .markdown-body em {
   font-style: italic;
   color: var(--color-text);
+  font-synthesis: style; /* :root の font-synthesis:none を上書きし、イタリック合成を許可 */
 }
 
 /* 太字 */

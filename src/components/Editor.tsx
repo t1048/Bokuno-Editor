@@ -23,17 +23,17 @@ const markdownHighlightStyleLight = HighlightStyle.define([
   { tag: tags.heading2, color: '#0ea5e9', fontWeight: 'bold', backgroundColor: '#e0f2fe' },
   { tag: tags.heading3, color: '#38bdf8', fontWeight: 'bold', backgroundColor: '#f0f9ff' },
   { tag: tags.heading4, color: '#7dd3fc', fontWeight: 'bold', backgroundColor: '#f0f9ff' },
-  { tag: tags.heading5, color: '#bae6fd', fontWeight: 'bold' },
-  { tag: tags.heading6, color: '#e0f2fe', fontWeight: 'bold' },
+  { tag: tags.heading5, color: '#0369a1', fontWeight: 'bold' },
+  { tag: tags.heading6, color: '#075985', fontWeight: 'bold' },
   
   // 太字 - 背景色を追加して目立たせる
   { tag: tags.strong, fontWeight: 'bold', color: '#1e293b', backgroundColor: '#f1f5f9' },
   
-  // 斜体 - 色と背景色の組み合わせで視認性向上
-  { tag: tags.emphasis, fontStyle: 'italic', color: '#475569', backgroundColor: '#fef3c7' },
+  // 斜体
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#475569' },
   
   // 取り消し線
-  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#94a3b8', backgroundColor: '#fee2e2' },
+  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#94a3b8' },
   
   // インラインコード - 背景色と境界線を追加
   { tag: tags.monospace, backgroundColor: '#f1f5f9', color: '#059669', borderRadius: '4px' },
@@ -48,8 +48,8 @@ const markdownHighlightStyleLight = HighlightStyle.define([
   // 引用 - 背景色を追加
   { tag: tags.quote, fontStyle: 'italic', color: '#78350f', backgroundColor: '#fef3c7' },
   
-  // リスト - マーカーの色を強調
-  { tag: tags.list, color: '#0284c7', fontWeight: '600' },
+  // チェックボックス [ ] / [x]
+  { tag: tags.atom, color: '#0284c7', fontWeight: '700' },
   
   // 水平線
   { tag: tags.contentSeparator, color: '#cbd5e1', fontWeight: 'bold' },
@@ -72,8 +72,8 @@ const markdownHighlightStyleDark = HighlightStyle.define([
   // 太字 - 背景色を追加して目立たせる
   { tag: tags.strong, fontWeight: 'bold', color: '#f8fafc', backgroundColor: '#1e293b' },
   
-  // 斜体 - 色と背景色の組み合わせで視認性向上
-  { tag: tags.emphasis, fontStyle: 'italic', color: '#cbd5e1', backgroundColor: '#422006' },
+  // 斜体
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#cbd5e1' },
   
   // 取り消し線
   { tag: tags.strikethrough, textDecoration: 'line-through', color: '#64748b', backgroundColor: '#450a0a' },
@@ -91,8 +91,8 @@ const markdownHighlightStyleDark = HighlightStyle.define([
   // 引用 - 背景色を追加
   { tag: tags.quote, fontStyle: 'italic', color: '#fde68a', backgroundColor: '#422006' },
   
-  // リスト - マーカーの色を強調
-  { tag: tags.list, color: '#38bdf8', fontWeight: '600' },
+  // チェックボックス [ ] / [x]
+  { tag: tags.atom, color: '#38bdf8', fontWeight: '700' },
   
   // 水平線
   { tag: tags.contentSeparator, color: '#475569', fontWeight: 'bold' },
