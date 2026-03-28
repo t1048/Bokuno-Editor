@@ -1,0 +1,89 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "dev",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: dev",
+			"detail": "Vite開発サーバーの起動"
+		},
+		{
+			"type": "npm",
+			"script": "build",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: build",
+			"detail": "tsc -b && vite build"
+		},
+		{
+			"type": "npm",
+			"script": "preview",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: preview",
+			"detail": "本番ビルドのプレビュー"
+		},
+		{
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "tauri", "--", "dev"],
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: tauri dev",
+			"detail": "Tauriアプリの開発モード実行"
+		},
+		{
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "tauri", "--", "build"],
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: tauri build",
+			"detail": "Tauriアプリの本番ビルド（両方作成）"
+		},
+		{
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "tauri", "--", "build", "--", "--bundles", "nsis"],
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: tauri build nsis",
+			"detail": "NSISインストーラーの作成"
+		},
+		{
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "tauri", "--", "build", "--", "--bundles", "msi"],
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: tauri build msi",
+			"detail": "MSIインストーラーの作成"
+		},
+		{
+			"type": "shell",
+			"command": "cargo",
+			"args": ["build"],
+			"options": {
+				"cwd": "${workspaceFolder}/src-tauri"
+			},
+			"group": "build",
+			"problemMatcher": [],
+			"label": "cargo: build",
+			"detail": "Rustのデバッグビルド"
+		},
+		{
+			"type": "shell",
+			"command": "cargo",
+			"args": ["build", "--release"],
+			"options": {
+				"cwd": "${workspaceFolder}/src-tauri"
+			},
+			"group": "build",
+			"problemMatcher": [],
+			"label": "cargo: build --release",
+			"detail": "Rustのリリースビルド"
+		}
+	]
+}

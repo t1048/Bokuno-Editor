@@ -10,57 +10,11 @@
 }
 
 .csv-header-actions {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  padding: 2px;
-  box-sizing: border-box;
-  border-radius: 4px;
-  background-color: color-mix(in srgb, var(--color-surface-elevated) 92%, transparent);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 120ms ease, visibility 120ms ease;
+  display: none;
 }
 
 .csv-header-action-btn {
-  flex-shrink: 0;
-  min-width: 22px;
-  width: 22px;
-  height: 18px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-elevated);
-  color: var(--color-text);
-  border-radius: 3px;
-  padding: 0;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 100ms ease, border-color 100ms ease;
-}
-
-.csv-header-action-btn:hover:not(:disabled) {
-  background: var(--color-surface);
-  border-color: var(--color-focus-ring);
-}
-
-.csv-header-action-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.csv-header-action-btn--delete:hover:not(:disabled) {
-  background: color-mix(in srgb, #cc0000 18%, var(--color-surface));
-  border-color: #cc4444;
+  display: none;
 }
 
 .csv-virtual-container {
@@ -84,20 +38,20 @@
   position: relative;
 }
 
-.csv-cell-header:hover .csv-header-actions,
-.csv-cell-header:focus-within .csv-header-actions,
-.csv-cell-header.csv-header--selected .csv-header-actions {
+.csv-cell-header:hover .csv-header-delete-btn,
+.csv-header--selected .csv-header-delete-btn {
   opacity: 1;
-  visibility: visible;
   pointer-events: auto;
 }
 
 .csv-col-header {
   border-top: 1px solid var(--color-border);
+  justify-content: center;
 }
 
 .csv-row-header {
   border-left: 1px solid var(--color-border);
+  justify-content: center;
 }
 
 .csv-corner {
@@ -116,17 +70,109 @@
   box-sizing: border-box;
 }
 
-.csv-col-header .csv-header-content,
-.csv-row-header .csv-header-content,
-.csv-fallback-index .csv-header-content {
-  padding-right: 78px;
-}
-
 .csv-header-title {
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.csv-header-delete-btn {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  color: var(--color-muted-text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background-color 100ms ease;
+}
+
+.csv-header-delete-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #cc0000 15%, var(--color-surface));
+  border-color: #cc4444;
+  color: var(--color-text);
+}
+
+.csv-header-delete-btn:disabled {
+  opacity: 0.3 !important;
+  cursor: not-allowed;
+}
+
+.csv-insert-line {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.csv-insert-row-line {
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-focus-ring);
+  transform: translateY(-1px);
+}
+
+.csv-insert-col-line {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--color-focus-ring);
+  transform: translateX(-1px);
+}
+
+.csv-insert-btn {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-focus-ring);
+  background: var(--color-surface-elevated);
+  color: var(--color-focus-ring);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+  transition: background-color 100ms ease;
+}
+
+.csv-insert-btn:hover:not(:disabled) {
+  background: var(--color-focus-ring);
+  color: #fff;
+}
+
+.csv-insert-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.csv-insert-row-line .csv-insert-btn {
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.csv-insert-col-line .csv-insert-btn {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .csv-header--selected {
@@ -256,8 +302,8 @@
 }
 
 .csv-fallback-index {
-  min-width: 110px !important;
-  width: 110px;
+  min-width: 60px !important;
+  width: 60px;
   text-align: center;
   background-color: var(--color-surface-elevated);
   color: var(--color-muted-text);

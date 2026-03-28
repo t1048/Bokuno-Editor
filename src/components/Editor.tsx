@@ -16,88 +16,90 @@ import './Editor.css'
 
 const isInitialContent = Annotation.define<boolean>()
 
-// Markdown用カスタムハイライトスタイル（ライトテーマ）
+// Markdown 用カスタムハイライトスタイル（ライトテーマ）
 const markdownHighlightStyleLight = HighlightStyle.define([
-  // 見出し
-  { tag: tags.heading1, color: '#e11d48', fontWeight: 'bold' },
-  { tag: tags.heading2, color: '#d97706', fontWeight: 'bold' },
-  { tag: tags.heading3, color: '#059669', fontWeight: 'bold' },
-  { tag: tags.heading4, color: '#0284c7', fontWeight: 'bold' },
-  { tag: tags.heading5, color: '#7c3aed', fontWeight: 'bold' },
-  { tag: tags.heading6, color: '#64748b', fontWeight: 'bold' },
+  // 見出し - 階層別に異なる色で視認性向上
+  { tag: tags.heading1, color: '#0284c7', fontWeight: 'bold', backgroundColor: '#e0f2fe' },
+  { tag: tags.heading2, color: '#0ea5e9', fontWeight: 'bold', backgroundColor: '#e0f2fe' },
+  { tag: tags.heading3, color: '#38bdf8', fontWeight: 'bold', backgroundColor: '#f0f9ff' },
+  { tag: tags.heading4, color: '#7dd3fc', fontWeight: 'bold', backgroundColor: '#f0f9ff' },
+  { tag: tags.heading5, color: '#0369a1', fontWeight: 'bold' },
+  { tag: tags.heading6, color: '#075985', fontWeight: 'bold' },
   
-  // 太字
-  { tag: tags.strong, fontWeight: 'bold', color: '#0f172a' },
+  // 太字 - 背景色を追加して目立たせる
+  { tag: tags.strong, fontWeight: 'bold', color: '#1e293b', backgroundColor: '#f1f5f9' },
   
   // 斜体
-  { tag: tags.emphasis, fontStyle: 'italic', color: '#334155' },
+  { tag: tags.emphasis, fontStyle: 'italic', color: '#475569' },
   
   // 取り消し線
-  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#64748b' },
+  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#94a3b8' },
   
-  // インラインコード
-  { tag: tags.monospace, color: '#e11d48', backgroundColor: 'rgba(225, 24, 72, 0.08)', borderRadius: '3px' },
+  // インラインコード - 背景色と境界線を追加
+  { tag: tags.monospace, backgroundColor: '#f1f5f9', color: '#059669', borderRadius: '4px' },
   
-  // コードブロック
-  { tag: tags.comment, color: '#059669' },
+  // コードブロック - より明確な背景色
+  { tag: tags.comment, color: '#047857', backgroundColor: '#ecfdf5' },
   
-  // リンク
-  { tag: tags.url, color: '#0ea5e9', textDecoration: 'underline' },
-  { tag: tags.link, color: '#0ea5e9', textDecoration: 'underline' },
+  // リンク - ホバーエフェクト強化のため色を強調
+  { tag: tags.url, color: '#0284c7', textDecoration: 'underline', fontWeight: '500' },
+  { tag: tags.link, color: '#0284c7', textDecoration: 'underline', fontWeight: '500' },
   
-  // 引用
-  { tag: tags.quote, color: '#64748b', fontStyle: 'italic', backgroundColor: 'rgba(100, 116, 139, 0.08)' },
+  // 引用 - 背景色を追加
+  { tag: tags.quote, fontStyle: 'italic', color: '#78350f', backgroundColor: '#fef3c7' },
   
-  // リスト
-  { tag: tags.list, color: '#0ea5e9', fontWeight: '600' },
+  // チェックボックス [ ] / [x]
+  { tag: tags.atom, color: '#0284c7', fontWeight: '700' },
   
   // 水平線
-  { tag: tags.contentSeparator, color: '#94a3b8' },
+  { tag: tags.contentSeparator, color: '#cbd5e1', fontWeight: 'bold' },
   
-  // テーブル
+  // テーブル - セル境界線とヘッダー背景色
   { tag: tags.operator, color: '#64748b', fontWeight: '600' },
+  { tag: tags.string, backgroundColor: '#f0fdf4', color: '#166534' },
 ])
 
-// Markdown用カスタムハイライトスタイル（ダークテーマ）
+// Markdown 用カスタムハイライトスタイル（ダークテーマ）
 const markdownHighlightStyleDark = HighlightStyle.define([
-  // 見出し
-  { tag: tags.heading1, color: '#fb7185', fontWeight: 'bold' },
-  { tag: tags.heading2, color: '#fbbf24', fontWeight: 'bold' },
-  { tag: tags.heading3, color: '#34d399', fontWeight: 'bold' },
-  { tag: tags.heading4, color: '#38bdf8', fontWeight: 'bold' },
-  { tag: tags.heading5, color: '#a78bfa', fontWeight: 'bold' },
-  { tag: tags.heading6, color: '#94a3b8', fontWeight: 'bold' },
+  // 見出し - 階層別に異なる色で視認性向上
+  { tag: tags.heading1, color: '#38bdf8', fontWeight: 'bold', backgroundColor: '#0c4a6e' },
+  { tag: tags.heading2, color: '#7dd3fc', fontWeight: 'bold', backgroundColor: '#0c4a6e' },
+  { tag: tags.heading3, color: '#bae6fd', fontWeight: 'bold', backgroundColor: '#164e63' },
+  { tag: tags.heading4, color: '#e0f2fe', fontWeight: 'bold', backgroundColor: '#164e63' },
+  { tag: tags.heading5, color: '#f0f9ff', fontWeight: 'bold' },
+  { tag: tags.heading6, color: '#ffffff', fontWeight: 'bold' },
   
-  // 太字
-  { tag: tags.strong, fontWeight: 'bold', color: '#f8fafc' },
+  // 太字 - 背景色を追加して目立たせる
+  { tag: tags.strong, fontWeight: 'bold', color: '#f8fafc', backgroundColor: '#1e293b' },
   
   // 斜体
   { tag: tags.emphasis, fontStyle: 'italic', color: '#cbd5e1' },
   
   // 取り消し線
-  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#94a3b8' },
+  { tag: tags.strikethrough, textDecoration: 'line-through', color: '#64748b', backgroundColor: '#450a0a' },
   
-  // インラインコード
-  { tag: tags.monospace, color: '#fb7185', backgroundColor: 'rgba(251, 113, 133, 0.12)', borderRadius: '3px' },
+  // インラインコード - 背景色と境界線を追加
+  { tag: tags.monospace, backgroundColor: '#1e293b', color: '#34d399', borderRadius: '4px' },
   
-  // コードブロック
-  { tag: tags.comment, color: '#34d399' },
+  // コードブロック - より明確な背景色
+  { tag: tags.comment, color: '#6ee7b7', backgroundColor: '#064e3b' },
   
-  // リンク
-  { tag: tags.url, color: '#38bdf8', textDecoration: 'underline' },
-  { tag: tags.link, color: '#38bdf8', textDecoration: 'underline' },
+  // リンク - ホバーエフェクト強化のため色を強調
+  { tag: tags.url, color: '#38bdf8', textDecoration: 'underline', fontWeight: '500' },
+  { tag: tags.link, color: '#38bdf8', textDecoration: 'underline', fontWeight: '500' },
   
-  // 引用
-  { tag: tags.quote, color: '#94a3b8', fontStyle: 'italic', backgroundColor: 'rgba(148, 163, 184, 0.12)' },
+  // 引用 - 背景色を追加
+  { tag: tags.quote, fontStyle: 'italic', color: '#fde68a', backgroundColor: '#422006' },
   
-  // リスト
-  { tag: tags.list, color: '#38bdf8', fontWeight: '600' },
+  // チェックボックス [ ] / [x]
+  { tag: tags.atom, color: '#38bdf8', fontWeight: '700' },
   
   // 水平線
-  { tag: tags.contentSeparator, color: '#64748b' },
+  { tag: tags.contentSeparator, color: '#475569', fontWeight: 'bold' },
   
-  // テーブル
+  // テーブル - セル境界線とヘッダー背景色
   { tag: tags.operator, color: '#94a3b8', fontWeight: '600' },
+  { tag: tags.string, backgroundColor: '#064e3b', color: '#6ee7b7' },
 ])
 
 interface EditorProps {
