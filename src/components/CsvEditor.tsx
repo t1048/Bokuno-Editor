@@ -603,14 +603,6 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
     setSelectedCell((prev) => ({ row: insertIndex, col: prev?.col ?? 0 }));
   }, [emitChange, isLoading]);
 
-  const handleInsertRowBefore = useCallback((rowIndex: number) => {
-    handleInsertRowAt(rowIndex);
-  }, [handleInsertRowAt]);
-
-  const handleInsertRowAfter = useCallback((rowIndex: number) => {
-    handleInsertRowAt(rowIndex + 1);
-  }, [handleInsertRowAt]);
-
   const handleDeleteRow = useCallback((rowIndex: number) => {
     if (isLoading || data.length <= 1) return;
     setEditingCell(null);
@@ -642,14 +634,6 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
     });
     setSelectedCell((prev) => ({ row: prev?.row ?? 0, col: insertIndex }));
   }, [emitChange, isLoading]);
-
-  const handleInsertColumnBefore = useCallback((colIndex: number) => {
-    handleInsertColumnAt(colIndex);
-  }, [handleInsertColumnAt]);
-
-  const handleInsertColumnAfter = useCallback((colIndex: number) => {
-    handleInsertColumnAt(colIndex + 1);
-  }, [handleInsertColumnAt]);
 
   const handleDeleteColumn = useCallback((colIndex: number) => {
     if (isLoading || (data[0]?.length ?? 0) <= 1) return;
