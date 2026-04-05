@@ -111,12 +111,14 @@ interface EditorProps {
   readOnly?: boolean
   fontSize?: number
   lineEnding?: string
+  showLineEndingMarkers?: boolean
   onChange?: (content: string) => void
+  onUserScrollAwayFromBottom?: () => void
 }
 
 export interface EditorRef {
   getContent: () => string
-  appendContent: (text: string) => void
+  appendContent: (text: string, autoScroll?: boolean) => void
   scrollToBottom: () => void
   scrollToLine: (lineNumber: number) => void
   setContent?: (text: string) => void
@@ -152,7 +154,7 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', onChange }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', showLineEndingMarkers = true, onChange, onUserScrollAwayFromBottom }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
@@ -168,6 +170,14 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   const totalSizeRef = useRef(0)
   const isStreamingRef = useRef(false)
   const shouldStreamRef = useRef(false)
+  const ignoreNextScrollRef = useRef(false)
+  const suppressManualScrollDetectUntilRef = useRef(0)
+  const userScrollIntentUntilRef = useRef(0)
+  const onUserScrollAwayFromBottomRef = useRef(onUserScrollAwayFromBottom)
+
+  useEffect(() => {
+    onUserScrollAwayFromBottomRef.current = onUserScrollAwayFromBottom
+  }, [onUserScrollAwayFromBottom])
 
   // Widget that renders a visible line ending marker
   class LineEndingWidget extends WidgetType {
@@ -249,6 +259,10 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     }
   }, [filePath])
 
+  const markUserScrollIntent = useCallback((durationMs = 1200) => {
+    userScrollIntentUntilRef.current = Date.now() + durationMs
+  }, [])
+
   useImperativeHandle(ref, () => ({
     getContent: () => {
       return viewRef.current?.state.doc.toString() || ''
@@ -261,20 +275,32 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       })
       view.dispatch(transaction)
     },
-    appendContent: (text: string) => {
+    appendContent: (text: string, autoScroll = true) => {
       const view = viewRef.current
       if (!view) return
       const endPos = view.state.doc.length
       view.dispatch({
         changes: { from: endPos, insert: text },
-        effects: EditorView.scrollIntoView(endPos + text.length, { y: 'end' }),
+        effects: autoScroll ? EditorView.scrollIntoView(endPos + text.length, { y: 'end' }) : [],
       })
+      if (autoScroll) {
+        ignoreNextScrollRef.current = true
+        suppressManualScrollDetectUntilRef.current = Date.now() + 800
+        requestAnimationFrame(() => {
+          ignoreNextScrollRef.current = false
+        })
+      }
     },
     scrollToBottom: () => {
       const view = viewRef.current
       if (!view) return
+      ignoreNextScrollRef.current = true
+      suppressManualScrollDetectUntilRef.current = Date.now() + 800
       view.dispatch({
         effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }),
+      })
+      requestAnimationFrame(() => {
+        ignoreNextScrollRef.current = false
       })
     },
     scrollToLine: (lineNumber: number) => {
@@ -292,7 +318,9 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       const view = viewRef.current
       if (!view) return
       view.dispatch({
-        effects: lineEndingCompartmentRef.current.reconfigure(makeLineEndingPlugin(le)),
+        effects: lineEndingCompartmentRef.current.reconfigure(
+          showLineEndingMarkers ? makeLineEndingPlugin(le) : []
+        ),
       })
     },
   }))
@@ -334,7 +362,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
           syntaxHighlighting(theme === 'dark' ? markdownHighlightStyleDark : markdownHighlightStyleLight)
         ),
         // show line ending markers
-        lineEndingCompartmentRef.current.of(lineEndingPlugin),
+        lineEndingCompartmentRef.current.of(showLineEndingMarkers ? lineEndingPlugin : []),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange && !update.transactions.some(tr => tr.annotation(isInitialContent))) {
             onChange(update.state.doc.toString())
@@ -359,6 +387,47 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
 
     viewRef.current = view
 
+    const handleWheel = () => {
+      markUserScrollIntent()
+    }
+    const handlePointerDown = () => {
+      markUserScrollIntent()
+    }
+    const handleTouchStart = () => {
+      markUserScrollIntent()
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const scrollKeys = new Set([
+        'ArrowUp',
+        'ArrowDown',
+        'PageUp',
+        'PageDown',
+        'Home',
+        'End',
+        ' '
+      ])
+      if (scrollKeys.has(event.key)) {
+        markUserScrollIntent()
+      }
+    }
+
+    const handleScroll = () => {
+      if (!onUserScrollAwayFromBottomRef.current || ignoreNextScrollRef.current) return
+      const now = Date.now()
+      if (now < suppressManualScrollDetectUntilRef.current) return
+      const scroller = view.scrollDOM
+      const distanceFromBottom = scroller.scrollHeight - (scroller.scrollTop + scroller.clientHeight)
+      const userIntentActive = now <= userScrollIntentUntilRef.current
+      if (distanceFromBottom > 50 && userIntentActive) {
+        onUserScrollAwayFromBottomRef.current()
+      }
+    }
+    view.scrollDOM.addEventListener('wheel', handleWheel, { passive: true })
+    view.scrollDOM.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    view.scrollDOM.addEventListener('touchstart', handleTouchStart, { passive: true })
+    view.dom.addEventListener('keydown', handleKeyDown)
+    view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true })
+
     // If starting with empty content and have filePath, trigger first chunk
     shouldStreamRef.current = initialContent === '' && Boolean(filePath)
     if (shouldStreamRef.current) {
@@ -368,6 +437,11 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     }
 
     return () => {
+      view.scrollDOM.removeEventListener('wheel', handleWheel)
+      view.scrollDOM.removeEventListener('pointerdown', handlePointerDown)
+      view.scrollDOM.removeEventListener('touchstart', handleTouchStart)
+      view.dom.removeEventListener('keydown', handleKeyDown)
+      view.scrollDOM.removeEventListener('scroll', handleScroll)
       view.destroy()
       viewRef.current = null
     }
@@ -418,15 +492,17 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     })
   }, [fontSize])
 
-  // Update line ending markers when lineEnding prop changes
+  // Update line ending markers when lineEnding or visibility changes
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
     const le = (lineEnding || 'CRLF').toUpperCase()
     view.dispatch({
-      effects: lineEndingCompartmentRef.current.reconfigure(makeLineEndingPlugin(le)),
+      effects: lineEndingCompartmentRef.current.reconfigure(
+        showLineEndingMarkers ? makeLineEndingPlugin(le) : []
+      ),
     })
-  }, [lineEnding])
+  }, [lineEnding, showLineEndingMarkers])
 
   // Update language when fileName changes (file opened)
   useEffect(() => {

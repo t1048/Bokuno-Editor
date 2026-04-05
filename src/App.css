@@ -477,6 +477,41 @@ body.is-resizing {
   -webkit-backdrop-filter: blur(8px);
 }
 
+.tail-fab {
+  position: absolute;
+  right: 26px;
+  bottom: 26px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 10px 24px var(--color-shadow);
+  transition: all 0.18s ease;
+}
+
+.tail-fab:hover {
+  transform: translateY(-1px);
+  background: var(--color-hover-bg);
+}
+
+.tail-fab--active {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-color: var(--color-success-text);
+}
+
+.tail-fab span {
+  line-height: 1;
+}
+
 /* ─── Status Bar ─── */
 .status-bar {
   display: flex;
@@ -614,5 +649,11 @@ body.is-resizing {
   .action-btn svg {
     width: 16px;
     height: 16px;
+  }
+
+  .tail-fab {
+    right: 20px;
+    bottom: 20px;
+    padding: 8px 10px;
   }
 }
