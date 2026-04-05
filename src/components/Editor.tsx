@@ -1,7 +1,8 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
+import { keymap, Decoration, WidgetType, ViewPlugin } from '@codemirror/view'
+import type { DecorationSet } from '@codemirror/view'
 import { EditorState, Compartment, Annotation } from '@codemirror/state'
-import { keymap } from '@codemirror/view'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { findNext, findPrevious } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -109,6 +110,7 @@ interface EditorProps {
   theme: 'light' | 'dark'
   readOnly?: boolean
   fontSize?: number
+  lineEnding?: string
   onChange?: (content: string) => void
 }
 
@@ -117,6 +119,8 @@ export interface EditorRef {
   appendContent: (text: string) => void
   scrollToBottom: () => void
   scrollToLine: (lineNumber: number) => void
+  setContent?: (text: string) => void
+  setLineEnding?: (le: string) => void
 }
 
 const getLanguageExtension = (fileName: string) => {
@@ -148,7 +152,7 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, onChange }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', onChange }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
@@ -156,11 +160,65 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   const fontSizeCompartmentRef = useRef(new Compartment())
   const languageCompartmentRef = useRef(new Compartment())
   const highlightCompartmentRef = useRef(new Compartment())
+  // Decoration plugin for visible line ending markers
+  const lineEndingPluginRef = useRef<any>(null)
+  const lineEndingCompartmentRef = useRef(new Compartment())
 
   const offsetRef = useRef(0)
   const totalSizeRef = useRef(0)
   const isStreamingRef = useRef(false)
   const shouldStreamRef = useRef(false)
+
+  // Widget that renders a visible line ending marker
+  class LineEndingWidget extends WidgetType {
+    readonly marker: string
+    readonly className: string
+    constructor(marker: string, className = '') {
+      super()
+      this.marker = marker
+      this.className = className
+    }
+    toDOM() {
+      const span = document.createElement('span')
+      span.className = `cm-line-ending ${this.className}`
+      span.textContent = this.marker
+      span.title = 'Line ending: ' + this.marker
+      return span
+    }
+    ignoreEvent() { return false }
+  }
+
+  const makeLineEndingPlugin = (le: string) => {
+    const marker = le.toUpperCase()
+    const cls = `cm-line-ending--${le.toLowerCase()}`
+    return ViewPlugin.fromClass(class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = this.buildDeco(view)
+      }
+      update(update: any) {
+        if (update.docChanged || update.viewportChanged) {
+          this.decorations = this.buildDeco(update.view)
+        }
+      }
+      buildDeco(view: EditorView) {
+        const builder: any[] = []
+        for (const range of view.visibleRanges) {
+          let pos = range.from
+          while (pos <= range.to) {
+            const line = view.state.doc.lineAt(pos)
+            if (line.to < view.state.doc.length) {
+              const deco = Decoration.widget({ widget: new LineEndingWidget(marker, cls), side: 1 })
+              builder.push(deco.range(line.to))
+            }
+            if (line.to >= range.to) break
+            pos = line.to + 1
+          }
+        }
+        return Decoration.set(builder)
+      }
+    }, { decorations: v => (v as any).decorations })
+  }
 
   const loadNextChunk = useCallback(async () => {
     if (!shouldStreamRef.current) return
@@ -195,6 +253,14 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     getContent: () => {
       return viewRef.current?.state.doc.toString() || ''
     },
+    setContent: (text: string) => {
+      const view = viewRef.current
+      if (!view) return
+      const transaction = view.state.update({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+      })
+      view.dispatch(transaction)
+    },
     appendContent: (text: string) => {
       const view = viewRef.current
       if (!view) return
@@ -222,10 +288,21 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       })
       view.focus()
     },
+    setLineEnding: (le: string) => {
+      const view = viewRef.current
+      if (!view) return
+      view.dispatch({
+        effects: lineEndingCompartmentRef.current.reconfigure(makeLineEndingPlugin(le)),
+      })
+    },
   }))
 
   useEffect(() => {
     if (!editorRef.current) return
+
+    const lineEndingPlugin = makeLineEndingPlugin(lineEnding)
+
+    lineEndingPluginRef.current = lineEndingPlugin
 
     const state = EditorState.create({
       doc: initialContent,
@@ -256,6 +333,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
         highlightCompartmentRef.current.of(
           syntaxHighlighting(theme === 'dark' ? markdownHighlightStyleDark : markdownHighlightStyleLight)
         ),
+        // show line ending markers
+        lineEndingCompartmentRef.current.of(lineEndingPlugin),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange && !update.transactions.some(tr => tr.annotation(isInitialContent))) {
             onChange(update.state.doc.toString())
@@ -338,6 +417,16 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       })),
     })
   }, [fontSize])
+
+  // Update line ending markers when lineEnding prop changes
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const le = (lineEnding || 'CRLF').toUpperCase()
+    view.dispatch({
+      effects: lineEndingCompartmentRef.current.reconfigure(makeLineEndingPlugin(le)),
+    })
+  }, [lineEnding])
 
   // Update language when fileName changes (file opened)
   useEffect(() => {

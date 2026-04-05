@@ -20,6 +20,31 @@
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
 }
 
+/* Visible line ending markers */
+.editor .cm-line-ending {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 0.8em;
+  opacity: 0.9;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.editor .cm-line-ending--crlf {
+  color: #0369a1; /* blue */
+  background: rgba(2,132,199,0.06);
+  border: 1px solid rgba(2,132,199,0.12);
+}
+.editor .cm-line-ending--lf {
+  color: #059669; /* green */
+  background: rgba(5,150,105,0.06);
+  border: 1px solid rgba(5,150,105,0.12);
+}
+.editor .cm-line-ending--cr {
+  color: #b45309; /* orange */
+  background: rgba(245,158,11,0.06);
+  border: 1px solid rgba(245,158,11,0.12);
+}
+
 /* ========================================
    Markdown Edit モード シンタックスハイライト
    レイアウト崩れを避けるため、以下のスタイルのみ使用:

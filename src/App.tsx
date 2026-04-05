@@ -267,6 +267,7 @@ function App() {
           setFileName(getFileNameFromPath(selectedPath));
           setFilePath(selectedPath);
           setEncoding(metadata.encoding);
+          setLineEnding('CRLF');
           setIsModified(false);
           setSearchDirectory(getDirectoryFromPath(selectedPath));
           setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
@@ -284,6 +285,18 @@ function App() {
       setEncoding(result.encoding)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
+
+      const crlfCount = (result.content.match(/\r\n/g) || []).length
+      const crCount = (result.content.match(/\r/g) || []).length - crlfCount
+      const lfCount = (result.content.match(/\n/g) || []).length - crlfCount
+      if (crlfCount >= crCount && crlfCount >= lfCount) {
+        setLineEnding('CRLF')
+      } else if (crCount >= lfCount) {
+        setLineEnding('CR')
+      } else {
+        setLineEnding('LF')
+      }
+
       setStatusMessage(`Opened: ${result.file_name} (${result.encoding})`)
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
@@ -392,6 +405,18 @@ function App() {
       setFilePath(result.file_path)
       setEncoding(result.encoding)
       setIsModified(false)
+
+      const crlfCount = (result.content.match(/\r\n/g) || []).length
+      const crCount = (result.content.match(/\r/g) || []).length - crlfCount
+      const lfCount = (result.content.match(/\n/g) || []).length - crlfCount
+      if (crlfCount >= crCount && crlfCount >= lfCount) {
+        setLineEnding('CRLF')
+      } else if (crCount >= lfCount) {
+        setLineEnding('CR')
+      } else {
+        setLineEnding('LF')
+      }
+
       setStatusMessage(`Reopened: ${result.file_name} (${encoding})`)
     } catch (error) {
       setStatusMessage(`Error reopening: ${error}`)
@@ -567,6 +592,42 @@ function App() {
       setStatusMessage('Failed to copy path')
     }
   }, [filePath])
+
+  // Convert current editor content to selected line ending (used by status bar)
+  const handleConvertLineEndings = useCallback(() => {
+    if (isTailMode) {
+      setStatusMessage('Cannot convert line endings while tailing')
+      return
+    }
+
+    const sourceContent = (editorRef.current && typeof editorRef.current.getContent === 'function')
+      ? editorRef.current.getContent()
+      : fileContent
+
+    if (!sourceContent) {
+      setStatusMessage('No content to convert')
+      return
+    }
+
+    const normalized = sourceContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    let converted = normalized
+    if (lineEnding === 'CRLF') converted = normalized.replace(/\n/g, '\r\n')
+    else if (lineEnding === 'CR') converted = normalized.replace(/\n/g, '\r')
+
+    setFileContent(converted)
+    if (editorRef.current && typeof editorRef.current.setContent === 'function') {
+      try {
+        editorRef.current.setContent(converted)
+      } catch (e) {
+        console.error('Failed to update editor content after line ending conversion', e)
+      }
+    }
+    if (editorRef.current && typeof editorRef.current.setLineEnding === 'function') {
+      editorRef.current.setLineEnding(lineEnding)
+    }
+    setIsModified(true)
+    setStatusMessage(`Converted to ${lineEnding}`)
+  }, [fileContent, lineEnding, isTailMode])
 
   // エクスプローラーで開く
   const handleOpenInExplorer = useCallback(async () => {
@@ -773,6 +834,7 @@ function App() {
                 theme={theme}
                 readOnly={isTailMode}
                 fontSize={fontSize}
+                lineEnding={lineEnding}
                 onChange={handleContentChange}
               />
             )}
@@ -855,6 +917,14 @@ function App() {
                   <option value="CRLF">CRLF (Windows)</option>
                   <option value="CR">CR (Mac Legacy)</option>
                 </select>
+                <button
+                  className="reopen-button"
+                  onClick={handleConvertLineEndings}
+                  disabled={!filePath || isTailMode}
+                  title="Convert open file content to selected line ending"
+                >
+                  Convert
+                </button>
               </div>
 
               <div className="settings-note">
@@ -880,7 +950,7 @@ function App() {
           <span>{statusMessage}</span>
         </div>
 
-        <div className="status-secondary">
+          <div className="status-secondary">
           <span className="status-pill">{isTailMode ? 'Read only' : ((isMarkdown || isCsv) && previewMode ? 'Preview' : 'Editable')}</span>
           <span 
             className="status-pill clickable" 
@@ -889,7 +959,13 @@ function App() {
           >
             {encoding.toUpperCase()}
           </span>
-          <span className="status-pill">{lineEnding}</span>
+          <span
+            className="status-pill clickable"
+            title="Click to convert the whole file to this line ending"
+            onClick={handleConvertLineEndings}
+          >
+            {lineEnding}
+          </span>
           <span className="status-pill">Font {fontSize}px</span>
         </div>
       </footer>
