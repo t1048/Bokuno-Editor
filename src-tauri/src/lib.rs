@@ -1,12 +1,15 @@
 use ignore::WalkBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, BufReader};
 use std::path::Path;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use tauri::Manager;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SearchResult {
@@ -488,7 +491,22 @@ struct CliArgs {
 }
 
 #[tauri::command]
-async fn get_cli_args() -> Result<CliArgs, String> {
+async fn get_cli_args(window_label: Option<String>, registry: tauri::State<'_, WindowRegistry>) -> Result<CliArgs, String> {
+    if let Some(label) = window_label {
+        let mut guard = registry.launch_payloads.lock().unwrap();
+        if let Some(payload) = guard.remove(&label) {
+            return Ok(CliArgs {
+                file_path: payload.file_path,
+                folder_path: payload.folder_path,
+                line_number: payload.line_number,
+                search_directory: payload.search_directory,
+                search_mode: payload.search_mode,
+                search_pattern: payload.search_pattern,
+                search_cs: payload.search_cs,
+            });
+        }
+    }
+
     let args: Vec<String> = std::env::args().collect();
     
     // Parse arguments
@@ -539,10 +557,97 @@ async fn get_cli_args() -> Result<CliArgs, String> {
     })
 }
 
+#[tauri::command]
+async fn register_open_file(
+    window_label: String,
+    file_path: Option<String>,
+    registry: tauri::State<'_, WindowRegistry>,
+) -> Result<(), String> {
+    let mut open_files = registry.open_files.lock().unwrap();
+    open_files.retain(|_, label| label != &window_label);
+
+    if let Some(path) = file_path {
+        if !path.is_empty() {
+            open_files.insert(normalize_file_path(&path), window_label);
+        }
+    }
+
+    Ok(())
+}
+
 // --- Tail / log monitoring ---
 
 pub struct TailWatcher {
     current_stop: Mutex<Option<Arc<AtomicBool>>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct LaunchPayload {
+    file_path: Option<String>,
+    folder_path: Option<String>,
+    line_number: Option<usize>,
+    search_directory: Option<String>,
+    search_mode: bool,
+    search_pattern: Option<String>,
+    search_cs: bool,
+}
+
+pub struct WindowRegistry {
+    launch_payloads: Mutex<HashMap<String, LaunchPayload>>,
+    open_files: Mutex<HashMap<String, String>>, // normalized file_path -> window label
+}
+
+impl Default for WindowRegistry {
+    fn default() -> Self {
+        Self {
+            launch_payloads: Mutex::new(HashMap::new()),
+            open_files: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+fn normalize_file_path(path: &str) -> String {
+    if cfg!(target_os = "windows") {
+        path.replace('/', "\\").to_lowercase()
+    } else {
+        path.replace('\\', "/")
+    }
+}
+
+fn create_window_with_payload(
+    app: &tauri::AppHandle,
+    registry: &tauri::State<'_, WindowRegistry>,
+    payload: LaunchPayload,
+) -> Result<(), String> {
+    let label = format!("window-{}", WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed));
+    {
+        let mut guard = registry.launch_payloads.lock().unwrap();
+        guard.insert(label.clone(), payload);
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        label,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Bokuno-Editor")
+    .inner_size(600.0, 800.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|e| format!("Failed to create new window: {}", e))?;
+
+    Ok(())
+}
+
+fn focus_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let _ = window.unminimize();
+    let _ = window.show();
+    window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus existing window: {}", e))
 }
 
 impl Default for TailWatcher {
@@ -666,45 +771,75 @@ async fn open_in_explorer(file_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn spawn_search_window(directory: String, pattern: String, case_sensitive: bool) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg("--search-mode");
-    cmd.arg(format!("--dir={}", directory));
-    cmd.arg(format!("--pattern={}", pattern));
-    cmd.arg(format!("--cs={}", case_sensitive));
-    
-    cmd.spawn().map_err(|e| format!("Failed to spawn search window: {}", e))?;
-        
-    Ok(())
+async fn spawn_search_window(
+    app_handle: tauri::AppHandle,
+    registry: tauri::State<'_, WindowRegistry>,
+    directory: String,
+    pattern: String,
+    case_sensitive: bool,
+) -> Result<(), String> {
+    create_window_with_payload(
+        &app_handle,
+        &registry,
+        LaunchPayload {
+            search_mode: true,
+            search_directory: Some(directory),
+            search_pattern: Some(pattern),
+            search_cs: case_sensitive,
+            ..Default::default()
+        },
+    )
 }
 
 #[tauri::command]
-async fn open_file_in_new_window(file_path: String, line: Option<usize>) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg(format!("--file={}", file_path));
-    
-    if let Some(l) = line {
-        cmd.arg(format!("--line={}", l));
+async fn open_file_in_new_window(
+    app_handle: tauri::AppHandle,
+    registry: tauri::State<'_, WindowRegistry>,
+    file_path: String,
+    line: Option<usize>,
+) -> Result<(), String> {
+    let normalized = normalize_file_path(&file_path);
+    let existing_label = {
+        let guard = registry.open_files.lock().unwrap();
+        guard.get(&normalized).cloned()
+    };
+
+    if let Some(label) = existing_label {
+        if let Some(window) = app_handle.get_webview_window(&label) {
+            focus_window(&window)?;
+            if let Some(line_number) = line {
+                let _ = window.emit(
+                    "open_file_at_line",
+                    serde_json::json!({
+                        "file_path": file_path,
+                        "line_number": line_number,
+                    }),
+                );
+            }
+            return Ok(());
+        }
+
+        let mut guard = registry.open_files.lock().unwrap();
+        guard.remove(&normalized);
     }
-    
-    cmd.spawn().map_err(|e| format!("Failed to open file in new window: {}", e))?;
-        
-    Ok(())
+
+    create_window_with_payload(
+        &app_handle,
+        &registry,
+        LaunchPayload {
+            file_path: Some(file_path),
+            line_number: line,
+            ..Default::default()
+        },
+    )
 }
 
 #[tauri::command]
-async fn spawn_new_window() -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    
-    std::process::Command::new(exe)
-        .spawn()
-        .map_err(|e| format!("Failed to spawn new window: {}", e))?;
-        
-    Ok(())
+async fn spawn_new_window(
+    app_handle: tauri::AppHandle,
+    registry: tauri::State<'_, WindowRegistry>,
+) -> Result<(), String> {
+    create_window_with_payload(&app_handle, &registry, LaunchPayload::default())
 }
 
 #[tauri::command]
@@ -734,6 +869,21 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(TailWatcher::default())
+        .manage(WindowRegistry::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                let label = window.label().to_string();
+                let registry = window.state::<WindowRegistry>();
+
+                {
+                    let mut payloads = registry.launch_payloads.lock().unwrap();
+                    payloads.remove(&label);
+                }
+
+                let mut open_files = registry.open_files.lock().unwrap();
+                open_files.retain(|_, owner_label| owner_label != &label);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_directory,
             read_file,
@@ -743,6 +893,7 @@ pub fn run() {
             get_file_info,
             get_file_metadata,
             get_cli_args,
+            register_open_file,
             start_tail,
             stop_tail,
             open_in_explorer,

@@ -29,6 +29,11 @@ interface CliArgs {
   search_cs: boolean
 }
 
+interface OpenFileAtLinePayload {
+  file_path: string
+  line_number?: number
+}
+
 interface ReadRequest {
   file_path: string
   encoding?: string
@@ -42,6 +47,15 @@ interface WriteRequest {
 }
 
 type Theme = 'light' | 'dark'
+type LineEndingKind = 'CRLF' | 'LF' | 'CR'
+
+interface LineEndingStats {
+  crlfCount: number
+  crCount: number
+  lfCount: number
+  hasMixed: boolean
+  dominant: LineEndingKind
+}
 
 const isMarkdownFile = (name: string): boolean => {
   const ext = name.split('.').pop()?.toLowerCase()
@@ -72,6 +86,38 @@ const getFileNameFromPath = (fullPath: string) => {
   const normalized = fullPath.replace(/\\/g, '/')
   const parts = normalized.split('/')
   return parts[parts.length - 1] || ''
+}
+
+const getLineEndingStats = (content: string): LineEndingStats => {
+  const crlfCount = (content.match(/\r\n/g) || []).length
+  const crCount = (content.match(/\r/g) || []).length - crlfCount
+  const lfCount = (content.match(/\n/g) || []).length - crlfCount
+  const kinds = Number(crlfCount > 0) + Number(crCount > 0) + Number(lfCount > 0)
+  const hasMixed = kinds > 1
+
+  let dominant: LineEndingKind = 'CRLF'
+  if (crlfCount >= crCount && crlfCount >= lfCount) {
+    dominant = 'CRLF'
+  } else if (crCount >= lfCount) {
+    dominant = 'CR'
+  } else {
+    dominant = 'LF'
+  }
+
+  return { crlfCount, crCount, lfCount, hasMixed, dominant }
+}
+
+const normalizeLineEndings = (content: string, target: LineEndingKind): string => {
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (target === 'CRLF') return normalized.replace(/\n/g, '\r\n')
+  if (target === 'CR') return normalized.replace(/\n/g, '\r')
+  return normalized
+}
+
+const getTargetLineEndingCount = (stats: LineEndingStats, target: LineEndingKind): number => {
+  if (target === 'CRLF') return stats.crlfCount
+  if (target === 'CR') return stats.crCount
+  return stats.lfCount
 }
 
 function App() {
@@ -105,9 +151,11 @@ function App() {
   const [statusMessage, setStatusMessage] = useState('Ready')
   const [theme, setTheme] = useState<Theme>('light')
   const [isTailMode, setIsTailMode] = useState(false)
+  const [isTailAutoScroll, setIsTailAutoScroll] = useState(true)
   const [fontSize, setFontSize] = useState(14)
   const [encoding, setEncoding] = useState('auto')
   const [lineEnding, setLineEnding] = useState('CRLF')
+  const [showLineEndingMarkers, setShowLineEndingMarkers] = useState(true)
   const [searchDirectory, setSearchDirectory] = useState('')
   const [showPathMenu, setShowPathMenu] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
@@ -119,6 +167,7 @@ function App() {
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
   const isModifiedRef = useRef(isModified)
+  const isTailAutoScrollRef = useRef(isTailAutoScroll)
 
   // Sidebar resize logic
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -171,6 +220,10 @@ function App() {
   useEffect(() => {
     isModifiedRef.current = isModified
   }, [isModified])
+
+  useEffect(() => {
+    isTailAutoScrollRef.current = isTailAutoScroll
+  }, [isTailAutoScroll])
 
   // Intercept window close request if there are unsaved changes
   useEffect(() => {
@@ -231,6 +284,7 @@ function App() {
       tailUnlistenRef.current = null
     }
     setIsTailMode(false)
+    setIsTailAutoScroll(true)
   }, [])
 
   // Handle new window
@@ -267,6 +321,7 @@ function App() {
           setFileName(getFileNameFromPath(selectedPath));
           setFilePath(selectedPath);
           setEncoding(metadata.encoding);
+          setLineEnding('CRLF');
           setIsModified(false);
           setSearchDirectory(getDirectoryFromPath(selectedPath));
           setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
@@ -284,6 +339,10 @@ function App() {
       setEncoding(result.encoding)
       setIsModified(false)
       setSearchDirectory(getDirectoryFromPath(result.file_path))
+
+      const stats = getLineEndingStats(result.content)
+      setLineEnding(stats.dominant)
+
       setStatusMessage(`Opened: ${result.file_name} (${result.encoding})`)
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
@@ -332,11 +391,39 @@ function App() {
         targetName = getFileNameFromPath(selected)
       }
 
-      const saveEncoding = encoding === 'auto' ? 'utf-8' : encoding;
+      const sourceContent = (editorRef.current && typeof editorRef.current.getContent === 'function')
+        ? editorRef.current.getContent()
+        : fileContent
+      const stats = getLineEndingStats(sourceContent)
+      let contentToSave = sourceContent
+      const totalLineEndings = stats.crlfCount + stats.crCount + stats.lfCount
+      const targetCount = getTargetLineEndingCount(stats, lineEnding as LineEndingKind)
+      const hasLineEndingMismatch = totalLineEndings > 0 && targetCount !== totalLineEndings
+
+      if (hasLineEndingMismatch) {
+        const details = stats.hasMixed
+          ? `改行コードが混在しています (CRLF: ${stats.crlfCount}, LF: ${stats.lfCount}, CR: ${stats.crCount})。`
+          : `現在の改行コードは ${stats.dominant} です。`
+        const confirmed = await ask(
+          `${details}\n${lineEnding} に統一して保存しますか？`,
+          { title: 'Bokuno Editor', kind: 'warning', okLabel: '統一して保存', cancelLabel: 'キャンセル' }
+        )
+        if (!confirmed) {
+          setStatusMessage('Save canceled')
+          return
+        }
+        contentToSave = normalizeLineEndings(sourceContent, lineEnding as LineEndingKind)
+        setFileContent(contentToSave)
+        if (editorRef.current && typeof editorRef.current.setContent === 'function') {
+          editorRef.current.setContent(contentToSave)
+        }
+      }
+
+      const saveEncoding = encoding === 'auto' ? 'utf-8' : encoding
 
       const writeRequest: WriteRequest = { 
         file_path: targetPath, 
-        content: fileContent,
+        content: contentToSave,
         encoding: saveEncoding,
         line_ending: lineEnding
       }
@@ -392,6 +479,10 @@ function App() {
       setFilePath(result.file_path)
       setEncoding(result.encoding)
       setIsModified(false)
+
+      const stats = getLineEndingStats(result.content)
+      setLineEnding(stats.dominant)
+
       setStatusMessage(`Reopened: ${result.file_name} (${encoding})`)
     } catch (error) {
       setStatusMessage(`Error reopening: ${error}`)
@@ -427,7 +518,7 @@ function App() {
       await invoke('start_tail', { filePath })
 
       const unlistenUpdate = await listen<string>('tail_update', (event) => {
-        editorRef.current?.appendContent(event.payload)
+        editorRef.current?.appendContent(event.payload, isTailAutoScrollRef.current)
       })
 
       const unlistenRotated = await listen('tail_rotated', async () => {
@@ -439,7 +530,9 @@ function App() {
           setEncoding(result.encoding)
           setStatusMessage(`Tail: ${result.file_name} (rotated)`)
           // Scroll to bottom after React has re-rendered the new content
-          setTimeout(() => editorRef.current?.scrollToBottom(), 0)
+          if (isTailAutoScrollRef.current) {
+            setTimeout(() => editorRef.current?.scrollToBottom(), 0)
+          }
         } catch (error) {
           setStatusMessage(`Tail reload error: ${error}`)
         }
@@ -459,11 +552,31 @@ function App() {
       }
 
       setIsTailMode(true)
+      setIsTailAutoScroll(true)
       setStatusMessage(`Tailing: ${fileName}`)
     } catch (error) {
       setStatusMessage(`Failed to start tail: ${error}`)
     }
   }, [filePath, fileName])
+
+  const handleToggleTailAutoScroll = useCallback(() => {
+    setIsTailAutoScroll((prev) => {
+      const next = !prev
+      if (next) {
+        setTimeout(() => editorRef.current?.scrollToBottom(), 0)
+        setStatusMessage('Tail auto-scroll enabled')
+      } else {
+        setStatusMessage('Tail auto-scroll disabled')
+      }
+      return next
+    })
+  }, [])
+
+  const handleUserScrollAwayFromBottom = useCallback(() => {
+    if (!isTailMode || !isTailAutoScroll) return
+    setIsTailAutoScroll(false)
+    setStatusMessage('Tail auto-scroll disabled by manual scroll')
+  }, [isTailMode, isTailAutoScroll])
 
   // Cleanup tail listeners on unmount
   useEffect(() => {
@@ -480,7 +593,9 @@ function App() {
       }
 
       try {
-        const args = await invoke<CliArgs>('get_cli_args')
+        const args = await invoke<CliArgs>('get_cli_args', {
+          windowLabel: getCurrentWindow().label,
+        })
         
         // If folder path provided, open it in sidebar
         if (args.folder_path) {
@@ -525,6 +640,61 @@ function App() {
     loadCliArgs()
   }, [])
 
+  // Track which file is currently shown in this window
+  useEffect(() => {
+    if (!isTauri()) {
+      return
+    }
+
+    invoke('register_open_file', {
+      windowLabel: getCurrentWindow().label,
+      filePath: filePath || null,
+    }).catch((error) => {
+      console.error('Failed to register open file:', error)
+    })
+  }, [filePath])
+
+  // Bring existing window to front and optionally jump to line
+  useEffect(() => {
+    if (!isTauri()) {
+      return
+    }
+
+    let unlisten: (() => void) | null = null
+    let cancelled = false
+
+    const setup = async () => {
+      const nextUnlisten = await listen<OpenFileAtLinePayload>('open_file_at_line', async (event) => {
+        const targetPath = event.payload?.file_path
+        if (!targetPath) return
+
+        if (filePath !== targetPath) {
+          await loadFile(targetPath)
+        }
+
+        if (event.payload?.line_number) {
+          setTimeout(() => editorRef.current?.scrollToLine(event.payload.line_number!), 100)
+        }
+      })
+
+      if (cancelled) {
+        nextUnlisten()
+        return
+      }
+
+      unlisten = nextUnlisten
+    }
+
+    setup()
+
+    return () => {
+      cancelled = true
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [filePath, loadFile])
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -567,6 +737,39 @@ function App() {
       setStatusMessage('Failed to copy path')
     }
   }, [filePath])
+
+  // Convert current editor content to selected line ending (used by status bar)
+  const handleConvertLineEndings = useCallback(() => {
+    if (isTailMode) {
+      setStatusMessage('Cannot convert line endings while tailing')
+      return
+    }
+
+    const sourceContent = (editorRef.current && typeof editorRef.current.getContent === 'function')
+      ? editorRef.current.getContent()
+      : fileContent
+
+    if (!sourceContent) {
+      setStatusMessage('No content to convert')
+      return
+    }
+
+    const converted = normalizeLineEndings(sourceContent, lineEnding as LineEndingKind)
+
+    setFileContent(converted)
+    if (editorRef.current && typeof editorRef.current.setContent === 'function') {
+      try {
+        editorRef.current.setContent(converted)
+      } catch (e) {
+        console.error('Failed to update editor content after line ending conversion', e)
+      }
+    }
+    if (editorRef.current && typeof editorRef.current.setLineEnding === 'function') {
+      editorRef.current.setLineEnding(lineEnding)
+    }
+    setIsModified(true)
+    setStatusMessage(`Converted to ${lineEnding}`)
+  }, [fileContent, lineEnding, isTailMode])
 
   // エクスプローラーで開く
   const handleOpenInExplorer = useCallback(async () => {
@@ -773,11 +976,26 @@ function App() {
                 theme={theme}
                 readOnly={isTailMode}
                 fontSize={fontSize}
+                lineEnding={lineEnding}
+                showLineEndingMarkers={showLineEndingMarkers}
                 onChange={handleContentChange}
+                onUserScrollAwayFromBottom={handleUserScrollAwayFromBottom}
               />
             )}
           </div>
         </section>
+
+        {isTailMode && (
+          <button
+            className={`tail-fab ${isTailAutoScroll ? 'tail-fab--active' : ''}`}
+            onClick={handleToggleTailAutoScroll}
+            title={isTailAutoScroll ? 'Tail auto-scroll: ON' : 'Tail auto-scroll: OFF'}
+            aria-label={isTailAutoScroll ? 'Disable tail auto-scroll' : 'Enable tail auto-scroll'}
+          >
+            <Icon name="chevron-down" size={18} />
+            <span>{isTailAutoScroll ? 'Tail On' : 'Tail Off'}</span>
+          </button>
+        )}
 
         {showSettings && (
           <aside className="settings-panel" aria-label="Settings">
@@ -855,6 +1073,27 @@ function App() {
                   <option value="CRLF">CRLF (Windows)</option>
                   <option value="CR">CR (Mac Legacy)</option>
                 </select>
+                <button
+                  className="reopen-button"
+                  onClick={handleConvertLineEndings}
+                  disabled={!filePath || isTailMode}
+                  title="Convert open file content to selected line ending"
+                >
+                  Convert
+                </button>
+              </div>
+
+              <div className="settings-section">
+                <label htmlFor="line-ending-visibility">Line Ending Marker</label>
+                <label htmlFor="line-ending-visibility">
+                  <input
+                    id="line-ending-visibility"
+                    type="checkbox"
+                    checked={showLineEndingMarkers}
+                    onChange={(e) => setShowLineEndingMarkers(e.target.checked)}
+                  />
+                  {' '}改行コード表示を有効にする
+                </label>
               </div>
 
               <div className="settings-note">
@@ -880,7 +1119,7 @@ function App() {
           <span>{statusMessage}</span>
         </div>
 
-        <div className="status-secondary">
+          <div className="status-secondary">
           <span className="status-pill">{isTailMode ? 'Read only' : ((isMarkdown || isCsv) && previewMode ? 'Preview' : 'Editable')}</span>
           <span 
             className="status-pill clickable" 
@@ -889,7 +1128,20 @@ function App() {
           >
             {encoding.toUpperCase()}
           </span>
-          <span className="status-pill">{lineEnding}</span>
+          <span
+            className="status-pill clickable"
+            title="Click to convert the whole file to this line ending"
+            onClick={handleConvertLineEndings}
+          >
+            {lineEnding}
+          </span>
+          <span
+            className="status-pill clickable"
+            title="Toggle line ending markers"
+            onClick={() => setShowLineEndingMarkers((prev) => !prev)}
+          >
+            EOL {showLineEndingMarkers ? 'On' : 'Off'}
+          </span>
           <span className="status-pill">Font {fontSize}px</span>
         </div>
       </footer>
