@@ -661,9 +661,10 @@ function App() {
     }
 
     let unlisten: (() => void) | null = null
+    let cancelled = false
 
     const setup = async () => {
-      unlisten = await listen<OpenFileAtLinePayload>('open_file_at_line', async (event) => {
+      const nextUnlisten = await listen<OpenFileAtLinePayload>('open_file_at_line', async (event) => {
         const targetPath = event.payload?.file_path
         if (!targetPath) return
 
@@ -675,11 +676,19 @@ function App() {
           setTimeout(() => editorRef.current?.scrollToLine(event.payload.line_number!), 100)
         }
       })
+
+      if (cancelled) {
+        nextUnlisten()
+        return
+      }
+
+      unlisten = nextUnlisten
     }
 
     setup()
 
     return () => {
+      cancelled = true
       if (unlisten) {
         unlisten()
       }

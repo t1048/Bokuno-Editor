@@ -609,7 +609,11 @@ impl Default for WindowRegistry {
 static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 fn normalize_file_path(path: &str) -> String {
-    path.replace('/', "\\").to_lowercase()
+    if cfg!(target_os = "windows") {
+        path.replace('/', "\\").to_lowercase()
+    } else {
+        path.replace('\\', "/")
+    }
 }
 
 fn create_window_with_payload(
