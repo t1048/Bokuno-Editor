@@ -1,8 +1,9 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 'react'
+import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback, type MutableRefObject } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
 import { keymap, Decoration, WidgetType, ViewPlugin } from '@codemirror/view'
 import type { DecorationSet } from '@codemirror/view'
 import { EditorState, Compartment, Annotation } from '@codemirror/state'
+import type { Text } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
 import { findNext, findPrevious } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -16,6 +17,75 @@ import { invoke } from '@tauri-apps/api/core'
 import './Editor.css'
 
 const isInitialContent = Annotation.define<boolean>()
+
+type LineEndingKind = 'CRLF' | 'LF' | 'CR'
+
+const buildLineEndingMap = (content: string): LineEndingKind[] => {
+  const map: LineEndingKind[] = []
+  for (let i = 0; i < content.length; ) {
+    while (i < content.length && content[i] !== '\n' && content[i] !== '\r') i++
+    if (i >= content.length) break
+    if (content[i] === '\r' && content[i + 1] === '\n') { map.push('CRLF'); i += 2 }
+    else if (content[i] === '\r') { map.push('CR'); i += 1 }
+    else { map.push('LF'); i += 1 }
+  }
+  return map
+}
+
+const countEOLsBefore = (doc: Text, pos: number): number => {
+  let count = 0
+  for (let n = 1; n <= doc.lines; n++) {
+    const line = doc.line(n)
+    if (line.to < doc.length && line.to < pos) count++
+    else break
+  }
+  return count
+}
+
+const applyDocChangeToLineEndingMap = (
+  map: LineEndingKind[],
+  fromA: number,
+  toA: number,
+  inserted: string,
+  docBefore: Text,
+  defaultLE: LineEndingKind,
+  pastedEOLs: LineEndingKind[] | null,
+): LineEndingKind[] => {
+  const result = [...map]
+
+  let removeIdx = -1
+  let removeCount = 0
+  for (let n = 1; n <= docBefore.lines; n++) {
+    const line = docBefore.line(n)
+    if (line.to < docBefore.length && line.to >= fromA && line.to < toA) {
+      if (removeIdx === -1) removeIdx = n - 1
+      removeCount++
+    }
+  }
+
+  if (removeCount === 0 && fromA < toA) {
+    const startLine = docBefore.lineAt(fromA).number
+    const endLine = docBefore.lineAt(Math.min(toA, docBefore.length - 1)).number
+    if (endLine > startLine) {
+      removeIdx = startLine - 1
+      removeCount = 1
+    }
+  }
+
+  const insertedEOLs: LineEndingKind[] = pastedEOLs?.length
+    ? [...pastedEOLs]
+    : Array((inserted.match(/\n/g) || []).length).fill(defaultLE)
+
+  const insertIdx = removeIdx >= 0 ? removeIdx : countEOLsBefore(docBefore, fromA)
+
+  if (removeCount > 0) {
+    result.splice(insertIdx, removeCount, ...insertedEOLs)
+  } else if (insertedEOLs.length > 0) {
+    result.splice(insertIdx, 0, ...insertedEOLs)
+  }
+
+  return result
+}
 
 // Markdown 用カスタムハイライトスタイル（ライトテーマ）
 const markdownHighlightStyleLight = HighlightStyle.define([
@@ -156,7 +226,7 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', showLineEndingMarkers = false, onChange, onUserScrollAwayFromBottom }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', showLineEndingMarkers = false, initialLineEndingMap, onChange, onUserScrollAwayFromBottom }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
@@ -167,8 +237,13 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   // Decoration plugin for visible line ending markers
   const lineEndingPluginRef = useRef<any>(null)
   const lineEndingCompartmentRef = useRef(new Compartment())
-  const lineEndingMapRef = useRef<('CRLF' | 'LF' | 'CR')[]>([])
-  const pendingPasteMapRef = useRef<('CRLF' | 'LF' | 'CR')[] | null>(null)
+  const lineEndingMapRef = useRef<LineEndingKind[]>([])
+  const pendingPasteMapRef = useRef<LineEndingKind[] | null>(null)
+  const lineEndingRef = useRef(lineEnding)
+
+  useEffect(() => {
+    lineEndingRef.current = lineEnding
+  }, [lineEnding])
 
   const offsetRef = useRef(0)
   const totalSizeRef = useRef(0)
@@ -202,26 +277,49 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     ignoreEvent() { return false }
   }
 
-  const makeLineEndingPlugin = (getMap: () => ('CRLF' | 'LF' | 'CR')[], defaultLE: string) => {
+  const makeLineEndingPlugin = (
+    mapRef: MutableRefObject<LineEndingKind[]>,
+    pendingPasteRef: MutableRefObject<LineEndingKind[] | null>,
+    getDefaultLE: () => string,
+  ) => {
     return ViewPlugin.fromClass(class {
       decorations: DecorationSet
       constructor(view: EditorView) {
         this.decorations = this.buildDeco(view)
       }
       update(update: any) {
-        if (update.docChanged || update.viewportChanged) {
+        if (update.docChanged) {
+          for (const tr of update.transactions) {
+            if (tr.annotation(isInitialContent)) continue
+            if (!tr.docChanged) continue
+            tr.changes.iterChanges((fromA: number, toA: number, _fromB: number, _toB: number, inserted: any) => {
+              mapRef.current = applyDocChangeToLineEndingMap(
+                mapRef.current,
+                fromA,
+                toA,
+                inserted.toString(),
+                tr.startState.doc,
+                getDefaultLE().toUpperCase() as LineEndingKind,
+                pendingPasteRef.current,
+              )
+            })
+          }
+          pendingPasteRef.current = null
+          this.decorations = this.buildDeco(update.view)
+        } else if (update.viewportChanged) {
           this.decorations = this.buildDeco(update.view)
         }
       }
       buildDeco(view: EditorView) {
-        const map = getMap()
+        const map = mapRef.current
+        const defaultLE = getDefaultLE().toUpperCase()
         const builder: any[] = []
         for (const range of view.visibleRanges) {
           let pos = range.from
           while (pos <= range.to) {
             const line = view.state.doc.lineAt(pos)
             if (line.to < view.state.doc.length) {
-              const kind = map[line.number - 1] ?? defaultLE.toUpperCase()
+              const kind = map[line.number - 1] ?? defaultLE
               const cls = `cm-line-ending--${kind.toLowerCase()}`
               const deco = Decoration.widget({ widget: new LineEndingWidget(kind, cls), side: 1 })
               builder.push(deco.range(line.to))
@@ -324,7 +422,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       if (!view) return
       view.dispatch({
         effects: lineEndingCompartmentRef.current.reconfigure(
-          showLineEndingMarkers ? makeLineEndingPlugin(() => lineEndingMapRef.current, le) : []
+          showLineEndingMarkers ? makeLineEndingPlugin(lineEndingMapRef, pendingPasteMapRef, () => le || 'CRLF') : []
         ),
       })
     },
@@ -334,7 +432,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       if (view && showLineEndingMarkers) {
         view.dispatch({
           effects: lineEndingCompartmentRef.current.reconfigure(
-            makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF')
+            makeLineEndingPlugin(lineEndingMapRef, pendingPasteMapRef, () => lineEndingRef.current || 'CRLF')
           ),
         })
       }
@@ -344,7 +442,11 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   useEffect(() => {
     if (!editorRef.current) return
 
-    const lineEndingPlugin = makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF')
+    const lineEndingPlugin = makeLineEndingPlugin(
+      lineEndingMapRef,
+      pendingPasteMapRef,
+      () => lineEndingRef.current || 'CRLF',
+    )
 
     lineEndingPluginRef.current = lineEndingPlugin
 
@@ -379,6 +481,15 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
         ),
         // show line ending markers
         lineEndingCompartmentRef.current.of(showLineEndingMarkers ? lineEndingPlugin : []),
+        EditorView.domEventHandlers({
+          paste(event) {
+            const text = event.clipboardData?.getData('text/plain')
+            if (text) {
+              pendingPasteMapRef.current = buildLineEndingMap(text)
+            }
+            return false
+          },
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChange && !update.transactions.some(tr => tr.annotation(isInitialContent))) {
             onChange(update.state.doc.toString())
@@ -514,7 +625,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     if (!view) return
     view.dispatch({
       effects: lineEndingCompartmentRef.current.reconfigure(
-        showLineEndingMarkers ? makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF') : []
+        showLineEndingMarkers ? makeLineEndingPlugin(lineEndingMapRef, pendingPasteMapRef, () => lineEndingRef.current || 'CRLF') : []
       ),
     })
   }, [lineEnding, showLineEndingMarkers])
