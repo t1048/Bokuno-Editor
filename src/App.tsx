@@ -107,6 +107,18 @@ const getLineEndingStats = (content: string): LineEndingStats => {
   return { crlfCount, crCount, lfCount, hasMixed, dominant }
 }
 
+const buildLineEndingMap = (content: string): LineEndingKind[] => {
+  const map: LineEndingKind[] = []
+  for (let i = 0; i < content.length; ) {
+    while (i < content.length && content[i] !== '\n' && content[i] !== '\r') i++
+    if (i >= content.length) break
+    if (content[i] === '\r' && content[i + 1] === '\n') { map.push('CRLF'); i += 2 }
+    else if (content[i] === '\r') { map.push('CR'); i += 1 }
+    else { map.push('LF'); i += 1 }
+  }
+  return map
+}
+
 const normalizeLineEndings = (content: string, target: LineEndingKind): string => {
   const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   if (target === 'CRLF') return normalized.replace(/\n/g, '\r\n')
@@ -118,6 +130,21 @@ const getTargetLineEndingCount = (stats: LineEndingStats, target: LineEndingKind
   if (target === 'CRLF') return stats.crlfCount
   if (target === 'CR') return stats.crCount
   return stats.lfCount
+}
+
+const contentMatchesTargetLineEnding = (
+  content: string,
+  target: LineEndingKind
+): boolean => {
+  const stats = getLineEndingStats(content)
+  const total = stats.crlfCount + stats.crCount + stats.lfCount
+  if (total === 0) return true
+
+  // CodeMirror は内部表現を LF に正規化するため、LF のみの内容は
+  // UI の lineEnding 設定どおり保存される（write_file が変換を担当）
+  if (stats.lfCount === total) return true
+
+  return getTargetLineEndingCount(stats, target) === total
 }
 
 function App() {
@@ -155,7 +182,8 @@ function App() {
   const [fontSize, setFontSize] = useState(14)
   const [encoding, setEncoding] = useState('auto')
   const [lineEnding, setLineEnding] = useState('CRLF')
-  const [showLineEndingMarkers, setShowLineEndingMarkers] = useState(true)
+  const [showLineEndingMarkers, setShowLineEndingMarkers] = useState(false)
+  const [lineEndingMap, setLineEndingMap] = useState<LineEndingKind[]>([])
   const [searchDirectory, setSearchDirectory] = useState('')
   const [showPathMenu, setShowPathMenu] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
@@ -322,6 +350,7 @@ function App() {
           setFilePath(selectedPath);
           setEncoding(metadata.encoding);
           setLineEnding('CRLF');
+          setLineEndingMap([]);
           setIsModified(false);
           setSearchDirectory(getDirectoryFromPath(selectedPath));
           setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
@@ -342,6 +371,7 @@ function App() {
 
       const stats = getLineEndingStats(result.content)
       setLineEnding(stats.dominant)
+      setLineEndingMap(buildLineEndingMap(result.content))
 
       setStatusMessage(`Opened: ${result.file_name} (${result.encoding})`)
     } catch (error) {
@@ -396,9 +426,8 @@ function App() {
         : fileContent
       const stats = getLineEndingStats(sourceContent)
       let contentToSave = sourceContent
-      const totalLineEndings = stats.crlfCount + stats.crCount + stats.lfCount
-      const targetCount = getTargetLineEndingCount(stats, lineEnding as LineEndingKind)
-      const hasLineEndingMismatch = totalLineEndings > 0 && targetCount !== totalLineEndings
+      const hasLineEndingMismatch =
+        stats.hasMixed || !contentMatchesTargetLineEnding(sourceContent, lineEnding as LineEndingKind)
 
       if (hasLineEndingMismatch) {
         const details = stats.hasMixed
@@ -482,6 +511,7 @@ function App() {
 
       const stats = getLineEndingStats(result.content)
       setLineEnding(stats.dominant)
+      setLineEndingMap(buildLineEndingMap(result.content))
 
       setStatusMessage(`Reopened: ${result.file_name} (${encoding})`)
     } catch (error) {
@@ -767,6 +797,9 @@ function App() {
     if (editorRef.current && typeof editorRef.current.setLineEnding === 'function') {
       editorRef.current.setLineEnding(lineEnding)
     }
+    if (editorRef.current && typeof editorRef.current.setLineEndingMap === 'function') {
+      editorRef.current.setLineEndingMap(buildLineEndingMap(converted))
+    }
     setIsModified(true)
     setStatusMessage(`Converted to ${lineEnding}`)
   }, [fileContent, lineEnding, isTailMode])
@@ -978,6 +1011,7 @@ function App() {
                 fontSize={fontSize}
                 lineEnding={lineEnding}
                 showLineEndingMarkers={showLineEndingMarkers}
+                initialLineEndingMap={lineEndingMap}
                 onChange={handleContentChange}
                 onUserScrollAwayFromBottom={handleUserScrollAwayFromBottom}
               />

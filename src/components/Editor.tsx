@@ -112,6 +112,7 @@ interface EditorProps {
   fontSize?: number
   lineEnding?: string
   showLineEndingMarkers?: boolean
+  initialLineEndingMap?: ('CRLF' | 'LF' | 'CR')[]
   onChange?: (content: string) => void
   onUserScrollAwayFromBottom?: () => void
 }
@@ -123,6 +124,7 @@ export interface EditorRef {
   scrollToLine: (lineNumber: number) => void
   setContent?: (text: string) => void
   setLineEnding?: (le: string) => void
+  setLineEndingMap?: (map: ('CRLF' | 'LF' | 'CR')[]) => void
 }
 
 const getLanguageExtension = (fileName: string) => {
@@ -154,7 +156,7 @@ const getLanguageExtension = (fileName: string) => {
   }
 }
 
-const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', showLineEndingMarkers = true, onChange, onUserScrollAwayFromBottom }, ref) => {
+const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, fileName, theme, readOnly, fontSize = 14, lineEnding = 'CRLF', showLineEndingMarkers = false, onChange, onUserScrollAwayFromBottom }, ref) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartmentRef = useRef(new Compartment())
@@ -165,6 +167,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   // Decoration plugin for visible line ending markers
   const lineEndingPluginRef = useRef<any>(null)
   const lineEndingCompartmentRef = useRef(new Compartment())
+  const lineEndingMapRef = useRef<('CRLF' | 'LF' | 'CR')[]>([])
+  const pendingPasteMapRef = useRef<('CRLF' | 'LF' | 'CR')[] | null>(null)
 
   const offsetRef = useRef(0)
   const totalSizeRef = useRef(0)
@@ -198,9 +202,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
     ignoreEvent() { return false }
   }
 
-  const makeLineEndingPlugin = (le: string) => {
-    const marker = le.toUpperCase()
-    const cls = `cm-line-ending--${le.toLowerCase()}`
+  const makeLineEndingPlugin = (getMap: () => ('CRLF' | 'LF' | 'CR')[], defaultLE: string) => {
     return ViewPlugin.fromClass(class {
       decorations: DecorationSet
       constructor(view: EditorView) {
@@ -212,13 +214,16 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
         }
       }
       buildDeco(view: EditorView) {
+        const map = getMap()
         const builder: any[] = []
         for (const range of view.visibleRanges) {
           let pos = range.from
           while (pos <= range.to) {
             const line = view.state.doc.lineAt(pos)
             if (line.to < view.state.doc.length) {
-              const deco = Decoration.widget({ widget: new LineEndingWidget(marker, cls), side: 1 })
+              const kind = map[line.number - 1] ?? defaultLE.toUpperCase()
+              const cls = `cm-line-ending--${kind.toLowerCase()}`
+              const deco = Decoration.widget({ widget: new LineEndingWidget(kind, cls), side: 1 })
               builder.push(deco.range(line.to))
             }
             if (line.to >= range.to) break
@@ -319,16 +324,27 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       if (!view) return
       view.dispatch({
         effects: lineEndingCompartmentRef.current.reconfigure(
-          showLineEndingMarkers ? makeLineEndingPlugin(le) : []
+          showLineEndingMarkers ? makeLineEndingPlugin(() => lineEndingMapRef.current, le) : []
         ),
       })
+    },
+    setLineEndingMap: (map: ('CRLF' | 'LF' | 'CR')[]) => {
+      lineEndingMapRef.current = map
+      const view = viewRef.current
+      if (view && showLineEndingMarkers) {
+        view.dispatch({
+          effects: lineEndingCompartmentRef.current.reconfigure(
+            makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF')
+          ),
+        })
+      }
     },
   }))
 
   useEffect(() => {
     if (!editorRef.current) return
 
-    const lineEndingPlugin = makeLineEndingPlugin(lineEnding)
+    const lineEndingPlugin = makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF')
 
     lineEndingPluginRef.current = lineEndingPlugin
 
@@ -496,10 +512,9 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
-    const le = (lineEnding || 'CRLF').toUpperCase()
     view.dispatch({
       effects: lineEndingCompartmentRef.current.reconfigure(
-        showLineEndingMarkers ? makeLineEndingPlugin(le) : []
+        showLineEndingMarkers ? makeLineEndingPlugin(() => lineEndingMapRef.current, lineEnding || 'CRLF') : []
       ),
     })
   }, [lineEnding, showLineEndingMarkers])
@@ -511,6 +526,10 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       effects: languageCompartmentRef.current.reconfigure(getLanguageExtension(fileName)),
     })
   }, [fileName])
+
+  useEffect(() => {
+    lineEndingMapRef.current = initialLineEndingMap ?? []
+  }, [filePath, initialLineEndingMap])
 
   // Update content when initialContent changes (file opened)
   useEffect(() => {
