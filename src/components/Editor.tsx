@@ -5,13 +5,17 @@ import type { DecorationSet } from '@codemirror/view'
 import { EditorState, Compartment, Annotation } from '@codemirror/state'
 import type { Text } from '@codemirror/state'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
-import { findNext, findPrevious } from '@codemirror/search'
+import { findNext, findPrevious, openSearchPanel, searchKeymap } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
 import { rust } from '@codemirror/lang-rust'
 import { python } from '@codemirror/lang-python'
 import { markdown } from '@codemirror/lang-markdown'
 import { cpp } from '@codemirror/lang-cpp'
+import { html } from '@codemirror/lang-html'
+import { css } from '@codemirror/lang-css'
+import { yaml } from '@codemirror/lang-yaml'
+import { go } from '@codemirror/lang-go'
 import { tags } from '@lezer/highlight'
 import { invoke } from '@tauri-apps/api/core'
 import './Editor.css'
@@ -195,6 +199,8 @@ export interface EditorRef {
   setContent?: (text: string) => void
   setLineEnding?: (le: string) => void
   setLineEndingMap?: (map: ('CRLF' | 'LF' | 'CR')[]) => void
+  openSearch?: () => void
+  openReplace?: () => void
 }
 
 const getLanguageExtension = (fileName: string) => {
@@ -221,6 +227,17 @@ const getLanguageExtension = (fileName: string) => {
     case 'hpp':
     case 'hxx':
       return cpp()
+    case 'html':
+    case 'htm':
+      return html()
+    case 'css':
+    case 'scss':
+      return css()
+    case 'yaml':
+    case 'yml':
+      return yaml()
+    case 'go':
+      return go()
     default:
       return []
   }
@@ -437,6 +454,18 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
         })
       }
     },
+    openSearch: () => {
+      const view = viewRef.current
+      if (!view) return
+      openSearchPanel(view)
+      view.focus()
+    },
+    openReplace: () => {
+      const view = viewRef.current
+      if (!view) return
+      openSearchPanel(view)
+      view.focus()
+    },
   }))
 
   useEffect(() => {
@@ -455,6 +484,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(({ initialContent, filePath, f
       extensions: [
         basicSetup,
         keymap.of([
+          ...searchKeymap,
           { key: 'F2', run: findNext },
           { key: 'Shift-F2', run: findPrevious },
         ]),

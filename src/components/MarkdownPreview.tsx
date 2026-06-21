@@ -36,6 +36,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
   const containerRef = useRef<HTMLDivElement>(null)
   const [streamedContent, setStreamedContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isTruncated, setIsTruncated] = useState(false)
   const offsetRef = useRef(0)
   const totalSizeRef = useRef(0)
 
@@ -51,6 +52,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
       setStreamedContent(chunk.content)
       offsetRef.current = chunk.start + chunk.length
       totalSizeRef.current = chunk.total_size
+      setIsTruncated(chunk.total_size > chunk.start + chunk.length)
     } catch (e) {
       console.error('Markdown streaming error:', e)
     } finally {
@@ -63,6 +65,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
       loadStreaming(filePath)
     } else {
       setStreamedContent('')
+      setIsTruncated(false)
     }
   }, [content, filePath, loadStreaming])
 
@@ -151,6 +154,11 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, filePath, th
 
   return (
     <div className={`markdown-preview ${theme === 'dark' ? 'markdown-preview--dark' : ''}`}>
+      {isTruncated && (
+        <div className="markdown-truncation-notice">
+          プレビューは先頭 512 KB のみ表示しています。
+        </div>
+      )}
       <div
         ref={containerRef}
         className="markdown-body"

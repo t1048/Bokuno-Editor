@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "window-*"
   ],
   "permissions": [
     "core:default",
@@ -11,6 +12,8 @@
     "core:window:allow-close",
     "dialog:default",
     "dialog:allow-ask",
+    "dialog:allow-message",
+    "store:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://**" }, { "url": "https://**" }]

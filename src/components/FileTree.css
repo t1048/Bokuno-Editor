@@ -166,3 +166,99 @@
   color: var(--color-danger-hover);
   font-style: normal;
 }
+
+.tree-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 1px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.tree-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+}
+
+.tree-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tree-context-menu button:hover {
+  background: var(--color-hover-bg);
+}
+
+.tree-context-menu--danger {
+  color: var(--color-danger-hover);
+}
+
+.tree-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+}
+
+.tree-dialog {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 280px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.tree-dialog h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.tree-dialog input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.tree-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tree-dialog-actions button {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.tree-dialog-primary {
+  background: var(--color-text) !important;
+  color: var(--color-surface) !important;
+  border-color: transparent !important;
+}

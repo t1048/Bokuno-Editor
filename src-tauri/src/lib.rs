@@ -1,9 +1,10 @@
 use ignore::WalkBuilder;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Seek, SeekFrom, BufReader};
+use std::io::{Read, Seek, SeekFrom, BufReader, Write};
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,6 +25,8 @@ pub struct SearchRequest {
     pub directory: String,
     pub pattern: String,
     pub case_sensitive: bool,
+    #[serde(default)]
+    pub use_regex: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -220,6 +223,74 @@ async fn write_file(request: WriteRequest) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WriteChunkRequest {
+    pub file_path: String,
+    pub content: String,
+    pub append: bool,
+    pub encoding: Option<String>,
+    pub line_ending: Option<String>,
+}
+
+/// Stream-style write for large files (append or overwrite with buffered I/O).
+#[tauri::command]
+async fn write_file_chunked(request: WriteChunkRequest) -> Result<(), String> {
+    let mut content = request.content;
+
+    if let Some(le) = &request.line_ending {
+        match le.to_lowercase().as_str() {
+            "crlf" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n");
+            }
+            "cr" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r");
+            }
+            "lf" => {
+                content = content.replace("\r\n", "\n").replace("\r", "\n");
+            }
+            _ => {}
+        }
+    }
+
+    let mut encoding_name = request.encoding.as_deref().unwrap_or("utf-8");
+    if encoding_name == "auto" {
+        encoding_name = "utf-8";
+    }
+    let is_bom = encoding_name == "utf-8-bom";
+    let actual_encoding_name = if is_bom { "utf-8" } else { encoding_name };
+
+    let encoding = encoding_rs::Encoding::for_label(actual_encoding_name.as_bytes())
+        .ok_or_else(|| format!("Unknown encoding: {}", actual_encoding_name))?;
+
+    let (bytes, _, _) = encoding.encode(&content);
+
+    let mut final_bytes = Vec::new();
+    if is_bom && !request.append {
+        final_bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    }
+    final_bytes.extend_from_slice(&bytes);
+
+    if request.append {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&request.file_path)
+            .map_err(|e| format!("Failed to open file for append: {}", e))?;
+        file.write_all(&final_bytes)
+            .map_err(|e| format!("Failed to append to file: {}", e))?;
+    } else {
+        let mut file = fs::File::create(&request.file_path)
+            .map_err(|e| format!("Failed to create file: {}", e))?;
+        const BUF_SIZE: usize = 1024 * 1024;
+        for chunk in final_bytes.chunks(BUF_SIZE) {
+            file.write_all(chunk)
+                .map_err(|e| format!("Failed to write chunk: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
 fn adjust_to_utf8_boundary<R: Read + Seek>(reader: &mut R, pos: u64) -> u64 {
     if pos == 0 {
         return 0;
@@ -362,9 +433,8 @@ async fn get_file_metadata(file_path: String) -> Result<serde_json::Value, Strin
 
 #[tauri::command]
 async fn search_in_directory(request: SearchRequest) -> Result<Vec<SearchResult>, String> {
-    let regex_flags = if request.case_sensitive { "" } else { "(?i)" };
-    let pattern = format!("{}{}", regex_flags, regex::escape(&request.pattern));
-    
+    let pattern = build_search_regex_pattern(&request.pattern, request.case_sensitive, request.use_regex);
+
     let regex = Regex::new(&pattern)
         .map_err(|e| format!("Invalid regex pattern: {}", e))?;
     
@@ -488,6 +558,7 @@ struct CliArgs {
     search_mode: bool,
     search_pattern: Option<String>,
     search_cs: bool,
+    search_regex: bool,
 }
 
 #[tauri::command]
@@ -503,6 +574,7 @@ async fn get_cli_args(window_label: Option<String>, registry: tauri::State<'_, W
                 search_mode: payload.search_mode,
                 search_pattern: payload.search_pattern,
                 search_cs: payload.search_cs,
+                search_regex: payload.search_regex,
             });
         }
     }
@@ -554,6 +626,7 @@ async fn get_cli_args(window_label: Option<String>, registry: tauri::State<'_, W
         search_mode,
         search_pattern,
         search_cs,
+        search_regex: false,
     })
 }
 
@@ -590,6 +663,7 @@ pub struct LaunchPayload {
     search_mode: bool,
     search_pattern: Option<String>,
     search_cs: bool,
+    search_regex: bool,
 }
 
 pub struct WindowRegistry {
@@ -659,13 +733,10 @@ impl Default for TailWatcher {
 }
 
 /// Start watching a file for new appended content (like `tail -f`).
-/// Emits the following events to the frontend:
-///   - "tail_update"  : new content appended (payload: String)
-///   - "tail_rotated" : file was truncated/rotated, frontend should reload it
-///   - "tail_error"   : file disappeared or unreadable (payload: String)
 #[tauri::command]
 async fn start_tail(
     file_path: String,
+    encoding: Option<String>,
     app_handle: tauri::AppHandle,
     watcher: tauri::State<'_, TailWatcher>,
 ) -> Result<(), String> {
@@ -691,9 +762,15 @@ async fn start_tail(
 
     let path = file_path.clone();
     let flag = stop_flag;
+    let encoding_label = encoding.unwrap_or_else(|| "utf-8".to_string());
 
     tokio::spawn(async move {
         let mut last_size = initial_size;
+        let resolve_encoding = |label: &str| -> &'static encoding_rs::Encoding {
+            let name = if label == "utf-8-bom" { "utf-8" } else { label };
+            encoding_rs::Encoding::for_label(name.as_bytes()).unwrap_or(encoding_rs::UTF_8)
+        };
+        let enc = resolve_encoding(&encoding_label);
 
         loop {
             if flag.load(Ordering::Relaxed) {
@@ -717,9 +794,8 @@ async fn start_tail(
                             if file.seek(SeekFrom::Start(last_size)).is_ok() {
                                 let mut buffer = Vec::new();
                                 if file.read_to_end(&mut buffer).is_ok() && !buffer.is_empty() {
-                                    let new_content =
-                                        String::from_utf8_lossy(&buffer).to_string();
-                                    let _ = app_handle.emit("tail_update", new_content);
+                                    let (decoded, _, _) = enc.decode(&buffer);
+                                    let _ = app_handle.emit("tail_update", decoded.into_owned());
                                 }
                             }
                         }
@@ -753,7 +829,7 @@ async fn stop_tail(watcher: tauri::State<'_, TailWatcher>) -> Result<(), String>
     Ok(())
 }
 
-/// Open the containing folder of a file in Windows Explorer, with the file selected.
+/// Open the containing folder with the file selected (cross-platform).
 #[tauri::command]
 async fn open_in_explorer(file_path: String) -> Result<(), String> {
     let path = Path::new(&file_path);
@@ -761,13 +837,107 @@ async fn open_in_explorer(file_path: String) -> Result<(), String> {
         return Err(format!("Path not found: {}", file_path));
     }
 
-    // Use explorer.exe /select to open the folder with the file highlighted
-    std::process::Command::new("explorer.exe")
-        .args([&format!("/select,{}", file_path)])
-        .spawn()
-        .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe")
+            .args([&format!("/select,{}", file_path)])
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &file_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open Finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "No parent directory".to_string())?;
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
 
     Ok(())
+}
+
+pub struct FileChangeWatcher {
+    watcher: Mutex<Option<RecommendedWatcher>>,
+}
+
+impl Default for FileChangeWatcher {
+    fn default() -> Self {
+        Self {
+            watcher: Mutex::new(None),
+        }
+    }
+}
+
+#[tauri::command]
+async fn start_file_watch(
+    file_path: String,
+    app_handle: tauri::AppHandle,
+    change_watcher: tauri::State<'_, FileChangeWatcher>,
+) -> Result<(), String> {
+    {
+        let mut guard = change_watcher.watcher.lock().unwrap();
+        *guard = None;
+    }
+
+    let path = Path::new(&file_path).to_path_buf();
+    if !path.is_file() {
+        return Err(format!("Not a file: {}", file_path));
+    }
+
+    let handle = app_handle.clone();
+    let watched_path = file_path.clone();
+
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<notify::Event, notify::Error>| {
+            if let Ok(event) = res {
+                if matches!(
+                    event.kind,
+                    EventKind::Modify(_) | EventKind::Create(_) | EventKind::Any
+                ) {
+                    let _ = handle.emit(
+                        "file_changed",
+                        serde_json::json!({ "file_path": watched_path }),
+                    );
+                }
+            }
+        },
+        notify::Config::default(),
+    )
+    .map_err(|e| format!("Failed to create file watcher: {}", e))?;
+
+    watcher
+        .watch(&path, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch file: {}", e))?;
+
+    {
+        let mut guard = change_watcher.watcher.lock().unwrap();
+        *guard = Some(watcher);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_file_watch(change_watcher: tauri::State<'_, FileChangeWatcher>) -> Result<(), String> {
+    let mut guard = change_watcher.watcher.lock().unwrap();
+    *guard = None;
+    Ok(())
+}
+
+#[tauri::command]
+async fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
+    fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))
 }
 
 #[tauri::command]
@@ -777,6 +947,7 @@ async fn spawn_search_window(
     directory: String,
     pattern: String,
     case_sensitive: bool,
+    use_regex: bool,
 ) -> Result<(), String> {
     create_window_with_payload(
         &app_handle,
@@ -786,6 +957,7 @@ async fn spawn_search_window(
             search_directory: Some(directory),
             search_pattern: Some(pattern),
             search_cs: case_sensitive,
+            search_regex: use_regex,
             ..Default::default()
         },
     )
@@ -868,7 +1040,9 @@ pub fn run() {
         .plugin(log_builder.build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
         .manage(TailWatcher::default())
+        .manage(FileChangeWatcher::default())
         .manage(WindowRegistry::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -889,6 +1063,7 @@ pub fn run() {
             read_file,
             read_file_chunk,
             write_file,
+            write_file_chunked,
             search_in_directory,
             get_file_info,
             get_file_metadata,
@@ -903,7 +1078,43 @@ pub fn run() {
             create_directory,
             remove_file,
             remove_directory,
+            rename_path,
+            start_file_watch,
+            stop_file_watch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn build_search_regex_pattern(pattern: &str, case_sensitive: bool, use_regex: bool) -> String {
+    let regex_flags = if case_sensitive { "" } else { "(?i)" };
+    if use_regex {
+        format!("{}{}", regex_flags, pattern)
+    } else {
+        format!("{}{}", regex_flags, regex::escape(pattern))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn literal_pattern_is_escaped() {
+        let built = build_search_regex_pattern("foo.bar", false, false);
+        assert!(built.contains("foo\\.bar"));
+        assert!(built.starts_with("(?i)"));
+    }
+
+    #[test]
+    fn regex_pattern_is_not_escaped() {
+        let built = build_search_regex_pattern(r"\d+", true, true);
+        assert_eq!(built, r"\d+");
+    }
+
+    #[test]
+    fn search_regex_compiles() {
+        let pattern = build_search_regex_pattern("hello", false, false);
+        assert!(Regex::new(&pattern).is_ok());
+    }
 }

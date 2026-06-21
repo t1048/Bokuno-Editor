@@ -8,6 +8,14 @@
   box-shadow: 0 8px 30px var(--color-shadow-soft);
 }
 
+.markdown-truncation-notice {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--color-muted-text);
+  background: color-mix(in srgb, var(--color-text) 6%, var(--color-editor-shell));
+  border-bottom: 1px solid var(--color-border);
+}
+
 .markdown-body {
   padding: 48px 60px;
   max-width: 900px;

@@ -93,7 +93,7 @@ cargo build
 cargo build --release
 ```
 
-`src-tauri/target/debug/app.exe` を直接実行する場合は、必ず先に `npm run build` で `src-tauri/dist/` を生成してください。
+`src-tauri/target/debug/Bokuno-Editor.exe` を直接実行する場合は、必ず先に `npm run build` で `src-tauri/dist/` を生成してください。
 
 推奨手順：
 
@@ -106,7 +106,7 @@ cd src-tauri
 cargo build
 
 # 直接起動
-./target/debug/app.exe
+./target/debug/Bokuno-Editor.exe
 ```
 
 ### 5. アプリケーションのパッケージング
@@ -138,13 +138,14 @@ npm run tauri build
 | `npm run tauri dev` | Tauriアプリの開発モード実行 |
 | `npm run tauri build` | Tauriアプリの本番ビルド |
 | `cargo build` | Rustのデバッグビルド |
-| `cargo build --release` | Rustのリリースビルド |
+| `npm run test` | フロントエンドユニットテスト (Vitest) |
+| `cargo test` | Rustユニットテスト |
 
 ## Windows右クリックメニュー登録/解除
 
 `src-tauri/windows-shell/` に以下のスクリプトを追加しています。
 
-- `register-context-menu.ps1`: テキストファイルの右クリックメニューへ「Bokuno-Editorで開く」を登録
+- `register-context-menu.ps1`: ファイル/フォルダ/ドライブの右クリックメニューへ「Bokuno-Editorで開く」「Bokuno-EditorでGrep」を登録
 - `unregister-context-menu.ps1`: 上記レジストリ登録を削除
 
 登録先レジストリキー（ユーザー単位、管理者権限不要）：
@@ -225,8 +226,8 @@ MSIビルドに失敗する場合：
 ```json
 {
   "productName": "Bokuno-Editor",
-  "version": "0.1.0",
-  "identifier": "com.bokuno-Editor.app",
+  "version": "0.1.6",
+  "identifier": "com.bokuno-editor.app",
   "build": {
     "frontendDist": "./dist",
     "devUrl": "http://localhost:5173"
@@ -235,7 +236,7 @@ MSIビルドに失敗する場合：
     "windows": [
       {
         "title": "Bokuno-Editor",
-        "width": 1200,
+        "width": 600,
         "height": 800
       }
     ]
@@ -259,16 +260,15 @@ tokio = { version = "1.35", features = ["rt-multi-thread", "fs"] }
 
 ### リリースビルドの最適化
 
-`src-tauri/Cargo.toml`に以下を追加：
+`src-tauri/Cargo.toml` に `[profile.release]` が設定済みです（LTO、strip 等）。
 
-```toml
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-opt-level = 3
-strip = true
-```
+### 非機能要件の計測（手動チェックリスト）
+
+リリースビルド後、以下を記録することを推奨します：
+
+- NSIS/MSI インストーラーのファイルサイズ（目標: 10–20 MB）
+- 起動からエディタ表示までの時間
+- アイドル時のメモリ使用量（目標: 50 MB 以下）
 
 ### バイナリサイズの削減
 

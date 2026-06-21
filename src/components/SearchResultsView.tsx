@@ -13,6 +13,7 @@ interface SearchResultsViewProps {
   directory: string
   pattern: string
   caseSensitive: boolean
+  useRegex?: boolean
   theme: string
 }
 
@@ -24,7 +25,7 @@ const getRelativePath = (fullPath: string, dirPath: string) => {
   return parts.slice(-3).join('/')
 }
 
-export default function SearchResultsView({ directory, pattern, caseSensitive, theme }: SearchResultsViewProps) {
+export default function SearchResultsView({ directory, pattern, caseSensitive, useRegex = false, theme }: SearchResultsViewProps) {
   const [results, setResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +45,7 @@ export default function SearchResultsView({ directory, pattern, caseSensitive, t
             directory,
             pattern,
             case_sensitive: caseSensitive,
+            use_regex: useRegex,
           }
         })
         if (mounted) {
@@ -61,7 +63,7 @@ export default function SearchResultsView({ directory, pattern, caseSensitive, t
     }
     runSearch()
     return () => { mounted = false }
-  }, [directory, pattern, caseSensitive])
+  }, [directory, pattern, caseSensitive, useRegex])
 
   const handleResultClick = useCallback(async (result: SearchResult) => {
     try {

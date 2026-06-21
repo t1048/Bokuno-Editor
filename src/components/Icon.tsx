@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
-  name: 'file' | 'save' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit' | 'plus' | 'folder' | 'folder-open' | 'sidebar' | 'chevron-right' | 'folder-plus' | 'trash';
+  name: 'file' | 'save' | 'save-as' | 'open' | 'search' | 'settings' | 'tail-start' | 'tail-stop' | 'chevron-down' | 'copy' | 'preview' | 'edit' | 'plus' | 'folder' | 'folder-open' | 'sidebar' | 'chevron-right' | 'folder-plus' | 'trash' | 'clock';
   size?: number | string;
 }
 
@@ -85,6 +85,22 @@ const Icon: React.FC<IconProps> = ({ name, size = 18, ...props }) => {
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
+        </svg>
+      );
+    case 'save-as':
+      return (
+        <svg {...commonProps}>
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
+          <path d="M15 3h2l3 3" />
+        </svg>
+      );
+    case 'clock':
+      return (
+        <svg {...commonProps}>
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
         </svg>
       );
     case 'tail-start':

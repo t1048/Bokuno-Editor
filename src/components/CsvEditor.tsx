@@ -730,6 +730,11 @@ export default function CsvEditor({ content, filePath, theme, onChange }: CsvEdi
   return (
     <div className={`csv-editor csv-theme-${theme} ${isLoading ? 'is-loading' : ''}`} ref={editorRef}>
       {loadError && <div className="csv-error-banner">{loadError}</div>}
+      {rowCount > 10000 && (
+        <div className="csv-warning-banner">
+          行数が {rowCount.toLocaleString()} 行です。大きな CSV はメモリ使用量が増加する場合があります。
+        </div>
+      )}
       <div className="csv-virtual-container">
         <div
           style={{ position: 'relative', width: '100%', height: '100%' }}

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import './SearchPanel.css'
 
 interface SearchPanelProps {
-  onSearch: (directory: string, pattern: string, caseSensitive: boolean) => void
+  onSearch: (directory: string, pattern: string, caseSensitive: boolean, useRegex: boolean) => void
   onClose: () => void
   initialDirectory?: string
   currentPath?: string
@@ -22,6 +22,7 @@ function SearchPanel({
   const [directory, setDirectory] = useState(initialDirectory)
   const [pattern, setPattern] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
+  const [useRegex, setUseRegex] = useState(false)
   const directoryInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -35,8 +36,8 @@ function SearchPanel({
 
   const handleSearch = useCallback(() => {
     if (!directory || !pattern) return
-    onSearch(directory, pattern, caseSensitive)
-  }, [directory, pattern, caseSensitive, onSearch])
+    onSearch(directory, pattern, caseSensitive, useRegex)
+  }, [directory, pattern, caseSensitive, useRegex, onSearch])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -94,6 +95,14 @@ function SearchPanel({
               onChange={(e) => setCaseSensitive(e.target.checked)}
             />
             Case sensitive
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={useRegex}
+              onChange={(e) => setUseRegex(e.target.checked)}
+            />
+            Regular expression
           </label>
 
           <button

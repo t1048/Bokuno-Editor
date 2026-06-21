@@ -10,6 +10,14 @@ import SearchPanel from './components/SearchPanel'
 import SearchResultsView from './components/SearchResultsView'
 import FileTree from './components/FileTree'
 import Icon from './components/Icon'
+import { loadSettings, saveSettings, addRecentFile, type Theme } from './settings'
+import {
+  type LineEndingKind,
+  getLineEndingStats,
+  buildLineEndingMap,
+  normalizeLineEndings,
+  contentMatchesTargetLineEnding,
+} from './utils/lineEndings'
 import './App.css'
 
 interface FileContent {
@@ -27,6 +35,7 @@ interface CliArgs {
   search_mode: boolean
   search_pattern: string | null
   search_cs: boolean
+  search_regex: boolean
 }
 
 interface OpenFileAtLinePayload {
@@ -44,17 +53,6 @@ interface WriteRequest {
   content: string
   encoding?: string
   line_ending?: string
-}
-
-type Theme = 'light' | 'dark'
-type LineEndingKind = 'CRLF' | 'LF' | 'CR'
-
-interface LineEndingStats {
-  crlfCount: number
-  crCount: number
-  lfCount: number
-  hasMixed: boolean
-  dominant: LineEndingKind
 }
 
 const isMarkdownFile = (name: string): boolean => {
@@ -88,65 +86,6 @@ const getFileNameFromPath = (fullPath: string) => {
   return parts[parts.length - 1] || ''
 }
 
-const getLineEndingStats = (content: string): LineEndingStats => {
-  const crlfCount = (content.match(/\r\n/g) || []).length
-  const crCount = (content.match(/\r/g) || []).length - crlfCount
-  const lfCount = (content.match(/\n/g) || []).length - crlfCount
-  const kinds = Number(crlfCount > 0) + Number(crCount > 0) + Number(lfCount > 0)
-  const hasMixed = kinds > 1
-
-  let dominant: LineEndingKind = 'CRLF'
-  if (crlfCount >= crCount && crlfCount >= lfCount) {
-    dominant = 'CRLF'
-  } else if (crCount >= lfCount) {
-    dominant = 'CR'
-  } else {
-    dominant = 'LF'
-  }
-
-  return { crlfCount, crCount, lfCount, hasMixed, dominant }
-}
-
-const buildLineEndingMap = (content: string): LineEndingKind[] => {
-  const map: LineEndingKind[] = []
-  for (let i = 0; i < content.length; ) {
-    while (i < content.length && content[i] !== '\n' && content[i] !== '\r') i++
-    if (i >= content.length) break
-    if (content[i] === '\r' && content[i + 1] === '\n') { map.push('CRLF'); i += 2 }
-    else if (content[i] === '\r') { map.push('CR'); i += 1 }
-    else { map.push('LF'); i += 1 }
-  }
-  return map
-}
-
-const normalizeLineEndings = (content: string, target: LineEndingKind): string => {
-  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  if (target === 'CRLF') return normalized.replace(/\n/g, '\r\n')
-  if (target === 'CR') return normalized.replace(/\n/g, '\r')
-  return normalized
-}
-
-const getTargetLineEndingCount = (stats: LineEndingStats, target: LineEndingKind): number => {
-  if (target === 'CRLF') return stats.crlfCount
-  if (target === 'CR') return stats.crCount
-  return stats.lfCount
-}
-
-const contentMatchesTargetLineEnding = (
-  content: string,
-  target: LineEndingKind
-): boolean => {
-  const stats = getLineEndingStats(content)
-  const total = stats.crlfCount + stats.crCount + stats.lfCount
-  if (total === 0) return true
-
-  // CodeMirror は内部表現を LF に正規化するため、LF のみの内容は
-  // UI の lineEnding 設定どおり保存される（write_file が変換を担当）
-  if (stats.lfCount === total) return true
-
-  return getTargetLineEndingCount(stats, target) === total
-}
-
 function App() {
     // フォントサイズの増減範囲
     const MIN_FONT_SIZE = 10;
@@ -174,7 +113,7 @@ function App() {
   const [showSearch, setShowSearch] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [appMode, setAppMode] = useState<'editor' | 'search'>('editor')
-  const [searchParams, setSearchParams] = useState({ pattern: '', caseSensitive: false })
+  const [searchParams, setSearchParams] = useState({ pattern: '', caseSensitive: false, useRegex: false })
   const [statusMessage, setStatusMessage] = useState('Ready')
   const [theme, setTheme] = useState<Theme>('light')
   const [isTailMode, setIsTailMode] = useState(false)
@@ -190,12 +129,19 @@ function App() {
   const [folderPath, setFolderPath] = useState<string>('')
   const [showSidebar, setShowSidebar] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(250)
+  const [recentFiles, setRecentFiles] = useState<string[]>([])
+  const [showRecent, setShowRecent] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const isResizingRef = useRef(false)
   const pathMenuRef = useRef<HTMLDivElement>(null)
+  const recentMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorRef>(null)
   const tailUnlistenRef = useRef<(() => void) | null>(null)
+  const fileWatchUnlistenRef = useRef<(() => void) | null>(null)
   const isModifiedRef = useRef(isModified)
   const isTailAutoScrollRef = useRef(isTailAutoScroll)
+  const cliLoadedRef = useRef(false)
+  const isSavingRef = useRef(false)
 
   // Sidebar resize logic
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -229,6 +175,69 @@ function App() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [showSidebar]);
+
+  // Load persisted settings on startup
+  useEffect(() => {
+    loadSettings().then((settings) => {
+      setTheme(settings.theme)
+      setFontSize(settings.fontSize)
+      setEncoding(settings.encoding)
+      setLineEnding(settings.lineEnding)
+      setShowLineEndingMarkers(settings.showLineEndingMarkers)
+      setSidebarWidth(settings.sidebarWidth)
+      setRecentFiles(settings.recentFiles)
+      if (settings.lastWorkspace) {
+        setFolderPath(settings.lastWorkspace)
+        setShowSidebar(true)
+      }
+      setSettingsLoaded(true)
+    })
+  }, [])
+
+  // Persist settings (debounced)
+  useEffect(() => {
+    if (!settingsLoaded) return
+    const timer = setTimeout(() => {
+      saveSettings({
+        theme,
+        fontSize,
+        encoding,
+        lineEnding,
+        showLineEndingMarkers,
+        sidebarWidth,
+        recentFiles,
+        lastWorkspace: folderPath,
+      })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [
+    settingsLoaded,
+    theme,
+    fontSize,
+    encoding,
+    lineEnding,
+    showLineEndingMarkers,
+    sidebarWidth,
+    recentFiles,
+    folderPath,
+  ])
+
+  const recordRecentFile = useCallback((path: string) => {
+    setRecentFiles((prev) => addRecentFile(prev, path))
+  }, [])
+
+  // Close recent menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (recentMenuRef.current && !recentMenuRef.current.contains(e.target as Node)) {
+        setShowRecent(false)
+      }
+    }
+    if (showRecent) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showRecent])
 
   // MarkdownファイルかどうかをfileNameから判定
   const isMarkdown = isMarkdownFile(fileName)
@@ -352,8 +361,9 @@ function App() {
           setLineEnding('CRLF');
           setLineEndingMap([]);
           setIsModified(false);
-          setSearchDirectory(getDirectoryFromPath(selectedPath));
-          setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
+      setSearchDirectory(getDirectoryFromPath(selectedPath));
+      recordRecentFile(selectedPath);
+      setStatusMessage(`Opened (Streaming): ${getFileNameFromPath(selectedPath)} (${metadata.encoding})`)
           return;
       }
 
@@ -372,12 +382,13 @@ function App() {
       const stats = getLineEndingStats(result.content)
       setLineEnding(stats.dominant)
       setLineEndingMap(buildLineEndingMap(result.content))
+      recordRecentFile(result.file_path)
 
       setStatusMessage(`Opened: ${result.file_name} (${result.encoding})`)
     } catch (error) {
       setStatusMessage(`Error: ${error}`)
     }
-  }, [encoding, isTailMode, stopTail])
+  }, [encoding, isTailMode, stopTail, recordRecentFile])
 
   // Handle file open
   const handleOpenFile = useCallback(async () => {
@@ -403,74 +414,119 @@ function App() {
     }
   }, [])
 
-  // Handle file save
+  // Handle file save (overwrite or new file dialog)
+  const performSave = useCallback(async (targetPath: string, forceDialog = false) => {
+    let savePath = targetPath
+    let targetName = getFileNameFromPath(targetPath)
+
+    if (!savePath || forceDialog) {
+      const selected = await save({
+        defaultPath: targetName || fileName || 'untitled.txt',
+      })
+      if (!selected || typeof selected !== 'string') {
+        setStatusMessage('Save canceled')
+        return
+      }
+      savePath = selected
+      targetName = getFileNameFromPath(selected)
+    }
+
+    const sourceContent = (editorRef.current && typeof editorRef.current.getContent === 'function')
+      ? editorRef.current.getContent()
+      : fileContent
+    const stats = getLineEndingStats(sourceContent)
+    let contentToSave = sourceContent
+    const hasLineEndingMismatch =
+      stats.hasMixed || !contentMatchesTargetLineEnding(sourceContent, lineEnding as LineEndingKind)
+
+    if (hasLineEndingMismatch) {
+      const details = stats.hasMixed
+        ? `改行コードが混在しています (CRLF: ${stats.crlfCount}, LF: ${stats.lfCount}, CR: ${stats.crCount})。`
+        : `現在の改行コードは ${stats.dominant} です。`
+      const confirmed = await ask(
+        `${details}\n${lineEnding} に統一して保存しますか？`,
+        { title: 'Bokuno Editor', kind: 'warning', okLabel: '統一して保存', cancelLabel: 'キャンセル' }
+      )
+      if (!confirmed) {
+        setStatusMessage('Save canceled')
+        return
+      }
+      contentToSave = normalizeLineEndings(sourceContent, lineEnding as LineEndingKind)
+      const newMap = buildLineEndingMap(contentToSave)
+      setFileContent(contentToSave)
+      setLineEndingMap(newMap)
+      if (editorRef.current && typeof editorRef.current.setContent === 'function') {
+        editorRef.current.setContent(contentToSave)
+      }
+      if (editorRef.current && typeof editorRef.current.setLineEndingMap === 'function') {
+        editorRef.current.setLineEndingMap(newMap)
+      }
+    }
+
+    const saveEncoding = encoding === 'auto' ? 'utf-8' : encoding
+    const writeRequest: WriteRequest = {
+      file_path: savePath,
+      content: contentToSave,
+      encoding: saveEncoding,
+      line_ending: lineEnding,
+    }
+
+    const useChunked = contentToSave.length > 5 * 1024 * 1024
+    isSavingRef.current = true
+    try {
+      if (useChunked) {
+        await invoke('write_file_chunked', {
+          request: {
+            file_path: savePath,
+            content: contentToSave,
+            append: false,
+            encoding: saveEncoding,
+            line_ending: lineEnding,
+          },
+        })
+      } else {
+        await invoke('write_file', { request: writeRequest })
+      }
+    } finally {
+      // ファイルウォッチャーのイベントが届くまでの短い猶予を設ける
+      setTimeout(() => { isSavingRef.current = false }, 500)
+    }
+
+    const oldPath = filePath
+    setFilePath(savePath)
+    setFileName(targetName)
+    setSearchDirectory(getDirectoryFromPath(savePath))
+    setIsModified(false)
+    recordRecentFile(savePath)
+    if (encoding === 'auto') {
+      setEncoding('utf-8')
+    }
+
+    if (isTauri() && oldPath !== savePath) {
+      await invoke('register_open_file', {
+        windowLabel: getCurrentWindow().label,
+        filePath: savePath,
+      })
+    }
+
+    setStatusMessage(`Saved: ${targetName} (${saveEncoding}, ${lineEnding})`)
+  }, [filePath, fileName, fileContent, encoding, lineEnding, recordRecentFile])
+
   const handleSaveFile = useCallback(async () => {
     try {
-      let targetPath = filePath
-      let targetName = fileName
-
-      if (!targetPath) {
-        const selected = await save({
-          defaultPath: targetName || 'untitled.txt',
-        })
-        if (!selected || typeof selected !== 'string') {
-          setStatusMessage('Save canceled')
-          return
-        }
-        targetPath = selected
-        targetName = getFileNameFromPath(selected)
-      }
-
-      const sourceContent = (editorRef.current && typeof editorRef.current.getContent === 'function')
-        ? editorRef.current.getContent()
-        : fileContent
-      const stats = getLineEndingStats(sourceContent)
-      let contentToSave = sourceContent
-      const hasLineEndingMismatch =
-        stats.hasMixed || !contentMatchesTargetLineEnding(sourceContent, lineEnding as LineEndingKind)
-
-      if (hasLineEndingMismatch) {
-        const details = stats.hasMixed
-          ? `改行コードが混在しています (CRLF: ${stats.crlfCount}, LF: ${stats.lfCount}, CR: ${stats.crCount})。`
-          : `現在の改行コードは ${stats.dominant} です。`
-        const confirmed = await ask(
-          `${details}\n${lineEnding} に統一して保存しますか？`,
-          { title: 'Bokuno Editor', kind: 'warning', okLabel: '統一して保存', cancelLabel: 'キャンセル' }
-        )
-        if (!confirmed) {
-          setStatusMessage('Save canceled')
-          return
-        }
-        contentToSave = normalizeLineEndings(sourceContent, lineEnding as LineEndingKind)
-        setFileContent(contentToSave)
-        if (editorRef.current && typeof editorRef.current.setContent === 'function') {
-          editorRef.current.setContent(contentToSave)
-        }
-      }
-
-      const saveEncoding = encoding === 'auto' ? 'utf-8' : encoding
-
-      const writeRequest: WriteRequest = { 
-        file_path: targetPath, 
-        content: contentToSave,
-        encoding: saveEncoding,
-        line_ending: lineEnding
-      }
-      await invoke('write_file', { 
-        request: writeRequest 
-      })
-      setFilePath(targetPath)
-      setFileName(targetName)
-      setSearchDirectory(getDirectoryFromPath(targetPath))
-      setIsModified(false)
-      if (encoding === 'auto') {
-        setEncoding('utf-8')
-      }
-      setStatusMessage(`Saved: ${targetName} (${saveEncoding}, ${lineEnding})`)
+      await performSave(filePath)
     } catch (error) {
       setStatusMessage(`Error saving: ${error}`)
     }
-  }, [filePath, fileName, fileContent, encoding, lineEnding])
+  }, [performSave, filePath])
+
+  const handleSaveAs = useCallback(async () => {
+    try {
+      await performSave(filePath, true)
+    } catch (error) {
+      setStatusMessage(`Error saving: ${error}`)
+    }
+  }, [performSave, filePath])
 
   // Handle content change
   const handleContentChange = useCallback((content: string) => {
@@ -520,12 +576,13 @@ function App() {
   }, [filePath, encoding, isModified, isTailMode, stopTail])
 
   // Handle search
-  const handleSearch = useCallback(async (directory: string, pattern: string, caseSensitive: boolean) => {
+  const handleSearch = useCallback(async (directory: string, pattern: string, caseSensitive: boolean, useRegex: boolean) => {
     try {
       await invoke('spawn_search_window', {
         directory,
         pattern,
-        caseSensitive
+        caseSensitive,
+        useRegex,
       })
       setShowSearch(false)
     } catch (error) {
@@ -545,7 +602,7 @@ function App() {
     }
 
     try {
-      await invoke('start_tail', { filePath })
+      await invoke('start_tail', { filePath, encoding })
 
       const unlistenUpdate = await listen<string>('tail_update', (event) => {
         editorRef.current?.appendContent(event.payload, isTailAutoScrollRef.current)
@@ -587,7 +644,7 @@ function App() {
     } catch (error) {
       setStatusMessage(`Failed to start tail: ${error}`)
     }
-  }, [filePath, fileName])
+  }, [filePath, fileName, encoding])
 
   const handleToggleTailAutoScroll = useCallback(() => {
     setIsTailAutoScroll((prev) => {
@@ -646,6 +703,9 @@ function App() {
           setEncoding(result.encoding)
           setIsModified(false)
           setSearchDirectory(getDirectoryFromPath(result.file_path))
+          const cliStats = getLineEndingStats(result.content)
+          setLineEnding(cliStats.dominant)
+          setLineEndingMap(buildLineEndingMap(result.content))
           setStatusMessage(`Opened: ${result.file_name}`)
           
           if (args.line_number) {
@@ -656,7 +716,11 @@ function App() {
         if (args.search_mode && args.search_directory && args.search_pattern) {
           setAppMode('search')
           setSearchDirectory(args.search_directory)
-          setSearchParams({ pattern: args.search_pattern, caseSensitive: args.search_cs })
+          setSearchParams({
+            pattern: args.search_pattern,
+            caseSensitive: args.search_cs,
+            useRegex: args.search_regex,
+          })
         } else if (args.search_directory && !args.search_mode) {
           // If search directory provided, open search panel with it
           setSearchDirectory(args.search_directory)
@@ -664,11 +728,68 @@ function App() {
         }
       } catch (error) {
         console.error('Failed to load CLI args:', error)
+      } finally {
+        cliLoadedRef.current = true
       }
     }
     
-    loadCliArgs()
-  }, [])
+    if (settingsLoaded) {
+      loadCliArgs()
+    }
+  }, [settingsLoaded])
+
+  // Watch open file for external changes (not during tail)
+  useEffect(() => {
+    if (!isTauri() || !filePath || isTailMode) {
+      if (fileWatchUnlistenRef.current) {
+        fileWatchUnlistenRef.current()
+        fileWatchUnlistenRef.current = null
+      }
+      invoke('stop_file_watch').catch(() => {})
+      return
+    }
+
+    let cancelled = false
+
+    const setup = async () => {
+      try {
+        await invoke('start_file_watch', { filePath })
+        const unlisten = await listen<{ file_path: string }>('file_changed', async (event) => {
+          if (event.payload?.file_path !== filePath) return
+          if (isSavingRef.current) return
+          if (isModifiedRef.current) {
+            setStatusMessage('File changed externally (unsaved changes kept)')
+            return
+          }
+          const confirmed = await ask(
+            'ファイルが外部で変更されました。再読み込みしますか？',
+            { title: 'Bokuno Editor', kind: 'warning', okLabel: '再読み込み', cancelLabel: 'キャンセル' }
+          )
+          if (confirmed) {
+            await loadFile(filePath)
+          }
+        })
+        if (cancelled) {
+          unlisten()
+          return
+        }
+        fileWatchUnlistenRef.current = unlisten
+      } catch (error) {
+        console.error('Failed to start file watch:', error)
+      }
+    }
+
+    setup()
+
+    return () => {
+      cancelled = true
+      if (fileWatchUnlistenRef.current) {
+        fileWatchUnlistenRef.current()
+        fileWatchUnlistenRef.current = null
+      }
+      invoke('stop_file_watch').catch(() => {})
+    }
+  }, [filePath, isTailMode, loadFile])
 
   // Track which file is currently shown in this window
   useEffect(() => {
@@ -740,17 +861,31 @@ function App() {
             break
           case 's':
             e.preventDefault()
-            handleSaveFile()
+            if (e.shiftKey) {
+              handleSaveAs()
+            } else {
+              handleSaveFile()
+            }
             break
-          // Ctrl+Fで検索パネルを表示する機能は削除
-          // Ctrl+T (Tail) ショートカットは削除
+          case 'f':
+            e.preventDefault()
+            if (e.shiftKey) {
+              setShowSearch(true)
+            } else {
+              editorRef.current?.openSearch?.()
+            }
+            break
+          case 'h':
+            e.preventDefault()
+            editorRef.current?.openReplace?.()
+            break
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleNewWindow, handleOpenFile, handleSaveFile])
+  }, [handleNewWindow, handleOpenFile, handleSaveFile, handleSaveAs])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -826,6 +961,15 @@ function App() {
     }
   }, [filePath])
 
+  const handleFileRenamed = useCallback((oldPath: string, newPath: string) => {
+    if (filePath === oldPath) {
+      setFilePath(newPath)
+      setFileName(getFileNameFromPath(newPath))
+      setSearchDirectory(getDirectoryFromPath(newPath))
+      recordRecentFile(newPath)
+    }
+  }, [filePath, recordRecentFile])
+
   const statusTone = statusMessage.toLowerCase().includes('error') ? 'error' : 'ready'
 
   return (
@@ -848,6 +992,34 @@ function App() {
             <button className="action-btn" onClick={handleOpenFile} title="Open File (Ctrl+O)" aria-label="Open File">
               <Icon name="open" />
             </button>
+            <div className="recent-files-wrapper" ref={recentMenuRef}>
+              <button
+                className="action-btn"
+                onClick={() => setShowRecent((prev) => !prev)}
+                disabled={recentFiles.length === 0}
+                title="Recent files"
+                aria-label="Recent files"
+              >
+                <Icon name="clock" />
+              </button>
+              {showRecent && recentFiles.length > 0 && (
+                <div className="recent-files-dropdown">
+                  {recentFiles.map((path) => (
+                    <button
+                      key={path}
+                      className="recent-files-item"
+                      onClick={() => {
+                        setShowRecent(false)
+                        loadFile(path)
+                      }}
+                      title={path}
+                    >
+                      {getFileNameFromPath(path)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="action-btn" onClick={handleOpenFolder} title="Open Folder" aria-label="Open Folder">
               <Icon name="folder-open" />
             </button>
@@ -859,6 +1031,15 @@ function App() {
               aria-label="Save"
             >
               <Icon name="save" />
+            </button>
+            <button
+              className="action-btn"
+              onClick={handleSaveAs}
+              disabled={isTailMode}
+              title="Save As (Ctrl+Shift+S)"
+              aria-label="Save As"
+            >
+              <Icon name="save-as" />
             </button>
 
             <div className="action-separator" />
@@ -874,8 +1055,8 @@ function App() {
             </button>
             <button
               onClick={() => setShowSearch(true)}
-              title="Search (Ctrl+F)"
-              aria-label="Search"
+              title="Workspace Search (Ctrl+Shift+F)"
+              aria-label="Workspace Search"
               className={`action-btn ${showSearch ? 'action-btn--active' : ''}`}
             >
               <Icon name="search" />
@@ -968,6 +1149,7 @@ function App() {
                 onFileSelect={(path) => loadFile(path)}
                 selectedPath={filePath}
                 onFileDeleted={handleFileDeleted}
+                onFileRenamed={handleFileRenamed}
               />
             </aside>
             <div 
@@ -983,6 +1165,7 @@ function App() {
                 directory={searchDirectory}
                 pattern={searchParams.pattern}
                 caseSensitive={searchParams.caseSensitive}
+                useRegex={searchParams.useRegex}
                 theme={theme}
               />
             ) : (isMarkdown || isCsv) && previewMode ? (
